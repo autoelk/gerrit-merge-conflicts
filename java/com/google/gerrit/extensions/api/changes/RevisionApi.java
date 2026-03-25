@@ -29,10 +29,13 @@ import com.google.gerrit.extensions.common.DiffInfo;
 import com.google.gerrit.extensions.common.EditInfo;
 import com.google.gerrit.extensions.common.FileInfo;
 import com.google.gerrit.extensions.common.MergeableInfo;
+import com.google.gerrit.extensions.common.PublishThreeWayMergeConflictsInput;
 import com.google.gerrit.extensions.common.RevisionInfo;
 import com.google.gerrit.extensions.common.TestSubmitRuleInfo;
 import com.google.gerrit.extensions.common.TestSubmitRuleInput;
+import com.google.gerrit.extensions.common.ThreeWayMergeConflictsInfo;
 import com.google.gerrit.extensions.restapi.BinaryResult;
+import com.google.gerrit.extensions.restapi.NotImplementedException;
 import com.google.gerrit.extensions.restapi.RestApiException;
 import java.util.EnumSet;
 import java.util.List;
@@ -99,6 +102,15 @@ public interface RevisionApi {
   MergeableInfo mergeable() throws RestApiException;
 
   MergeableInfo mergeableOtherBranches() throws RestApiException;
+
+  default ThreeWayMergeConflictsInfo threeWayMergeConflicts() throws RestApiException {
+    throw new NotImplementedException("Three-way merge conflict retrieval");
+  }
+
+  default ChangeInfo publishThreeWayMergeConflicts(PublishThreeWayMergeConflictsInput in)
+      throws RestApiException {
+    throw new NotImplementedException("Three-way merge conflict publish");
+  }
 
   Map<String, List<CommentInfo>> comments() throws RestApiException;
 

@@ -165,6 +165,8 @@ public class ChangeRestApiModule extends RestApiModule {
     post(REVISION_KIND, "fix:apply").to(ApplyProvidedFix.class);
     post(REVISION_KIND, "fix:preview").to(PreviewFix.Provided.class);
     get(REVISION_KIND, "mergeable").to(Mergeable.class);
+    get(REVISION_KIND, "merge_conflicts:three_way").to(GetThreeWayMergeConflicts.class);
+    post(REVISION_KIND, "merge_conflicts:three_way").to(PublishThreeWayMergeConflicts.class);
     get(REVISION_KIND, "mergelist").to(GetMergeList.class);
     get(REVISION_KIND, "patch").to(GetPatch.class);
     get(REVISION_KIND, "ported_comments").to(ListPortedComments.class);
