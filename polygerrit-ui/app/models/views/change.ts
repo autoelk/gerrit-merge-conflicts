@@ -33,6 +33,7 @@ export enum ChangeChildView {
   OVERVIEW = 'OVERVIEW',
   DIFF = 'DIFF',
   EDIT = 'EDIT',
+  RESOLVE_CONFLICTS = 'RESOLVE_CONFLICTS',
 }
 
 export interface ChangeViewState extends ViewState {
@@ -168,6 +169,8 @@ export function createChangeViewUrl(state: ChangeViewState): string {
       return createDiffUrl(state);
     case ChangeChildView.EDIT:
       return createEditUrl(state);
+    case ChangeChildView.RESOLVE_CONFLICTS:
+      return createResolveConflictsUrl(state);
   }
 }
 
@@ -283,6 +286,18 @@ export function createEditUrl(
   const suffix = line ? `#${line}` : '';
 
   return `${createChangeUrlCommon(state)}${path},edit${suffix}`;
+}
+
+export function createResolveConflictsUrl(
+  obj: Omit<ChangeViewState, 'view' | 'childView'>
+): string {
+  const state: ChangeViewState = objToState({
+    ...obj,
+    childView: ChangeChildView.RESOLVE_CONFLICTS,
+  });
+  let patchRange = '';
+  if (state.patchNum) patchRange = `/${state.patchNum}`;
+  return `${createChangeUrlCommon(state)}${patchRange}/resolve-conflicts`;
 }
 
 /**

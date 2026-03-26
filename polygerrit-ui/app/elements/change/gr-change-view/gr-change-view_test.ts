@@ -917,6 +917,27 @@ suite('gr-change-view tests', () => {
     assert.isTrue(openDialogStub.called);
   });
 
+  test('resolve conflicts button navigates to conflict view', async () => {
+    element.change = {
+      ...createChangeViewChange(),
+      contains_git_conflicts: true,
+    };
+    element.patchNum = 3 as RevisionPatchSetNum;
+    element.loading = false;
+    await element.updateComplete;
+
+    const button = queryAndAssert<HTMLElement>(
+      element,
+      '.commitActions gr-button'
+    );
+    assert.include(button.textContent ?? '', 'Resolve conflicts');
+    button.click();
+    assert.equal(
+      setUrlStub.lastCall.firstArg,
+      '/c/test-project/+/42/3/resolve-conflicts'
+    );
+  });
+
   test('fetches the server config on attached', async () => {
     await element.updateComplete;
     assert.equal(

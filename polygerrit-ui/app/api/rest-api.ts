@@ -634,6 +634,50 @@ export declare interface ContextLine {
   context_line: string;
 }
 
+export enum ConflictResolutionChoice {
+  OURS = 'OURS',
+  THEIRS = 'THEIRS',
+  CUSTOM = 'CUSTOM',
+}
+
+export interface ConflictHunkInfo {
+  id: string;
+  base_lines?: string[];
+  ours_lines?: string[];
+  theirs_lines?: string[];
+}
+
+export interface ConflictFileInfo {
+  path: string;
+  hunks: ConflictHunkInfo[];
+}
+
+export interface ConflictDataInfo {
+  conflict_version?: string;
+  files: ConflictFileInfo[];
+}
+
+export interface ResolveConflictHunkInput {
+  id: string;
+  choice: ConflictResolutionChoice;
+  custom_result_lines?: string[];
+}
+
+export interface ResolveConflictFileInput {
+  path: string;
+  hunks: ResolveConflictHunkInput[];
+}
+
+export interface ResolveConflictsInput {
+  conflict_version?: string;
+  files: ResolveConflictFileInput[];
+}
+
+export interface ResolveConflictsResponse {
+  revision?: string;
+  patch_set_number?: number;
+}
+
 // https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#contributor-agreement-info
 export declare interface ContributorAgreementInfo {
   name: string;

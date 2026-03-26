@@ -21,6 +21,7 @@ import {
   createChangeUrl,
   createDiffUrl,
   createEditUrl,
+  createResolveConflictsUrl,
 } from './change';
 
 suite('change view state tests', () => {
@@ -185,5 +186,18 @@ suite('change view state tests', () => {
     window.CANONICAL_PATH = '/base';
     assert.equal(createEditUrl(params).substring(0, 5), '/base');
     window.CANONICAL_PATH = undefined;
+  });
+
+  test('createResolveConflictsUrl', () => {
+    const state: ChangeViewState = createChangeViewState();
+    assert.equal(
+      createResolveConflictsUrl(state),
+      '/c/test-project/+/42/resolve-conflicts'
+    );
+    state.patchNum = 7 as RevisionPatchSetNum;
+    assert.equal(
+      createResolveConflictsUrl(state),
+      '/c/test-project/+/42/7/resolve-conflicts'
+    );
   });
 });

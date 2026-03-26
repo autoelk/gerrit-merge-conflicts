@@ -99,6 +99,7 @@ import {ErrorCallback} from '../../api/rest';
 import {
   BatchLabelInput,
   BatchSubmitRequirementInput,
+  ConflictDataInfo,
   DeleteLabelInput,
   FileInfo,
   FixReplacementInfo,
@@ -108,6 +109,8 @@ import {
   IsFlowsEnabledInfo,
   LabelDefinitionInfo,
   LabelDefinitionInput,
+  ResolveConflictsInput,
+  ResolveConflictsResponse,
   SubmitRequirementInput,
   SubmitRequirementResultInfo,
 } from '../../api/rest-api';
@@ -850,6 +853,17 @@ export interface RestApiService extends Finalizable {
     changeNum: NumericChangeId,
     patchNum: PatchSetNum
   ): Promise<ActionNameToActionInfoMap | undefined>;
+
+  getRevisionConflicts(
+    changeNum: NumericChangeId,
+    patchNum: PatchSetNum
+  ): Promise<ConflictDataInfo | undefined>;
+
+  resolveRevisionConflicts(
+    changeNum: NumericChangeId,
+    patchNum: PatchSetNum,
+    input: ResolveConflictsInput
+  ): Promise<ResolveConflictsResponse | undefined>;
 
   confirmEmail(token: string): Promise<string | null>;
 

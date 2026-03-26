@@ -457,7 +457,8 @@ export class GrAppElement extends LitElement {
   private isChangeView() {
     return (
       this.view === GerritView.CHANGE &&
-      this.childView === ChangeChildView.OVERVIEW
+      (this.childView === ChangeChildView.OVERVIEW ||
+        this.childView === ChangeChildView.RESOLVE_CONFLICTS)
     );
   }
 
