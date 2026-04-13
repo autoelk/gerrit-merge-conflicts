@@ -8,6 +8,8 @@ import {sharedStyles} from '../../../styles/shared-styles';
 import {css, html, LitElement, PropertyValues} from 'lit';
 import {customElement, property, query, state} from 'lit/decorators.js';
 import {fire} from '../../../utils/event-util';
+import {Modifier} from '../../../utils/dom-util';
+import {ShortcutController} from '../../lit/shortcut-controller';
 import {
   applyConflictChoice,
   parseConflictRegions,
@@ -42,10 +44,33 @@ export class GrMergeEditor extends LitElement {
   @query('#panes')
   private panes?: HTMLDivElement;
 
+  @query('#result')
+  private resultTextarea?: HTMLTextAreaElement;
+
   @state()
   private activeConflictIndex = 0;
 
   private syncScrollSource?: HTMLTextAreaElement;
+
+  private readonly shortcuts = new ShortcutController(this);
+
+  constructor() {
+    super();
+    this.shortcuts.addLocal(
+      {key: 'c', modifiers: [Modifier.ALT_KEY]},
+      () => this.applyChoice('current')
+    );
+    this.shortcuts.addLocal(
+      {key: 'i', modifiers: [Modifier.ALT_KEY]},
+      () => this.applyChoice('incoming')
+    );
+    this.shortcuts.addLocal({key: 'n', modifiers: [Modifier.ALT_KEY]}, () =>
+      this.onNext()
+    );
+    this.shortcuts.addLocal({key: 'p', modifiers: [Modifier.ALT_KEY]}, () =>
+      this.onPrevious()
+    );
+  }
 
   static override get styles() {
     return [
@@ -70,16 +95,30 @@ export class GrMergeEditor extends LitElement {
           min-width: 0;
         }
         .column header {
+          border-left: 3px solid transparent;
           font-family: var(--header-font-family);
           font-size: var(--font-size-h3);
           font-weight: var(--font-weight-normal);
           margin-bottom: var(--spacing-s);
+          padding-left: var(--spacing-s);
         }
         .column header .hint {
           color: var(--deemphasized-text-color);
           display: block;
           font-size: var(--font-size-sm);
           font-weight: var(--font-weight-normal);
+        }
+        .column.base header {
+          border-left-color: var(--gray-foreground, #888);
+        }
+        .column.current header {
+          border-left-color: var(--info-foreground, #1a73e8);
+        }
+        .column.incoming header {
+          border-left-color: var(--success-foreground, #188038);
+        }
+        .column.result header {
+          border-left-color: var(--warning-foreground, #e37400);
         }
         textarea {
           border: 1px solid var(--border-color);
@@ -111,6 +150,23 @@ export class GrMergeEditor extends LitElement {
           font-family: var(--header-font-family);
           margin-right: var(--spacing-m);
         }
+        .conflict-badge {
+          align-items: center;
+          border-radius: 12px;
+          display: inline-flex;
+          font-size: var(--font-size-sm);
+          font-weight: var(--font-weight-bold);
+          gap: var(--spacing-xs);
+          padding: 2px var(--spacing-s);
+        }
+        .conflict-badge.has-conflicts {
+          background-color: var(--error-background, #fce8e6);
+          color: var(--error-foreground, #c5221f);
+        }
+        .conflict-badge.resolved {
+          background-color: var(--success-background, #e6f4ea);
+          color: var(--success-foreground, #188038);
+        }
       `,
     ];
   }
@@ -124,21 +180,28 @@ export class GrMergeEditor extends LitElement {
         this.activeConflictIndex = conflicts.length - 1;
       }
     }
+    if (changedProperties.has('activeConflictIndex')) {
+      this.updateComplete.then(() => this.scrollToActiveConflict());
+    }
   }
 
   override render() {
     const conflicts = parseConflictRegions(this.fileContent);
-    const conflictNum = conflicts.length
-      ? this.activeConflictIndex + 1
-      : 0;
+    const conflictNum = conflicts.length ? this.activeConflictIndex + 1 : 0;
     const hasConflict = conflicts.length > 0;
     const paneClass = this.showBaseColumn ? 'four' : '';
+
+    const badge = hasConflict
+      ? html`<span class="conflict-badge has-conflicts"
+            >${conflictNum} / ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}</span
+          >`
+      : html`<span class="conflict-badge resolved">No conflicts</span>`;
 
     return html`
       <div id="panes" class=${paneClass}>
         ${this.showBaseColumn
           ? html`
-              <div class="column">
+              <div class="column base">
                 <header>
                   Base
                   <span class="hint">Common ancestor (when available)</span>
@@ -152,10 +215,10 @@ export class GrMergeEditor extends LitElement {
               </div>
             `
           : ''}
-        <div class="column">
+        <div class="column current">
           <header>
             Current
-            <span class="hint">This patch set’s first parent</span>
+            <span class="hint">This patch set's first parent</span>
           </header>
           <textarea
             class="merge-pane"
@@ -164,10 +227,10 @@ export class GrMergeEditor extends LitElement {
             @scroll=${this.handleScroll}
           ></textarea>
         </div>
-        <div class="column">
+        <div class="column incoming">
           <header>
             Incoming
-            <span class="hint">This patch set’s second parent</span>
+            <span class="hint">This patch set's second parent</span>
           </header>
           <textarea
             class="merge-pane"
@@ -176,7 +239,7 @@ export class GrMergeEditor extends LitElement {
             @scroll=${this.handleScroll}
           ></textarea>
         </div>
-        <div class="column">
+        <div class="column result">
           <header>Result <span class="hint">Your edit (saved)</span></header>
           <textarea
             id="result"
@@ -188,29 +251,40 @@ export class GrMergeEditor extends LitElement {
         </div>
       </div>
       <div class="toolbar">
-        <span class="status">
-          ${hasConflict
-            ? `Conflict ${conflictNum} of ${conflicts.length}`
-            : 'No conflict markers'}
-        </span>
+        <span class="status">${badge}</span>
         <gr-button
           ?disabled=${!hasConflict}
           link=""
           @click=${this.onAcceptCurrent}
-          title="Keep the Current (first parent) side for this conflict"
+          title="Keep the Current (first parent) side for this conflict (Alt+C)"
           >Accept Current</gr-button
         >
         <gr-button
           ?disabled=${!hasConflict}
           link=""
           @click=${this.onAcceptIncoming}
-          title="Keep the Incoming (second parent) side for this conflict"
+          title="Keep the Incoming (second parent) side for this conflict (Alt+I)"
           >Accept Incoming</gr-button
+        >
+        <gr-button
+          ?disabled=${!hasConflict}
+          link=""
+          @click=${this.onAcceptAllCurrent}
+          title="Accept Current for all remaining conflicts"
+          >Accept All Current</gr-button
+        >
+        <gr-button
+          ?disabled=${!hasConflict}
+          link=""
+          @click=${this.onAcceptAllIncoming}
+          title="Accept Incoming for all remaining conflicts"
+          >Accept All Incoming</gr-button
         >
         <gr-button
           ?disabled=${!hasConflict || this.activeConflictIndex <= 0}
           link=""
           @click=${this.onPrevious}
+          title="Previous conflict (Alt+P)"
           >Previous conflict</gr-button
         >
         <gr-button
@@ -218,6 +292,7 @@ export class GrMergeEditor extends LitElement {
           this.activeConflictIndex >= conflicts.length - 1}
           link=""
           @click=${this.onNext}
+          title="Next conflict (Alt+N)"
           >Next conflict</gr-button
         >
       </div>
@@ -252,7 +327,16 @@ export class GrMergeEditor extends LitElement {
     this.applyChoice('incoming');
   };
 
-  private applyChoice(side: 'current' | 'incoming') {
+  private onAcceptAllCurrent = () => {
+    this.applyAllChoices('current');
+  };
+
+  private onAcceptAllIncoming = () => {
+    this.applyAllChoices('incoming');
+  };
+
+  // private but used in tests
+  applyChoice(side: 'current' | 'incoming') {
     const conflicts = parseConflictRegions(this.fileContent);
     const cur = conflicts[this.activeConflictIndex];
     if (!cur) return;
@@ -267,6 +351,18 @@ export class GrMergeEditor extends LitElement {
     }
   }
 
+  // private but used in tests
+  applyAllChoices(side: 'current' | 'incoming') {
+    let text = this.fileContent;
+    const conflicts = parseConflictRegions(text);
+    for (let i = conflicts.length - 1; i >= 0; i--) {
+      text = applyConflictChoice(text, conflicts[i], side);
+    }
+    this.fileContent = text;
+    fire(this, 'content-change', {value: text});
+    this.activeConflictIndex = 0;
+  }
+
   private onPrevious = () => {
     if (this.activeConflictIndex > 0) this.activeConflictIndex -= 1;
   };
@@ -277,6 +373,26 @@ export class GrMergeEditor extends LitElement {
       this.activeConflictIndex += 1;
     }
   };
+
+  private scrollToActiveConflict() {
+    const ta = this.resultTextarea;
+    if (!ta) return;
+    const conflicts = parseConflictRegions(this.fileContent);
+    const cur = conflicts[this.activeConflictIndex];
+    if (!cur) return;
+    const textBefore = this.fileContent.slice(0, cur.start);
+    const linesBefore = (textBefore.match(/\n/g) ?? []).length;
+    const lineHeightPx =
+      parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    const targetTop = linesBefore * lineHeightPx;
+    const center = targetTop - ta.clientHeight / 2;
+    ta.scrollTop = Math.max(0, center);
+    // sync other panes
+    this.panes?.querySelectorAll('textarea.merge-pane').forEach(el => {
+      const t = el as HTMLTextAreaElement;
+      if (t !== ta) t.scrollTop = ta.scrollTop;
+    });
+  }
 }
 
 declare global {

@@ -663,7 +663,13 @@ export class GrEditorView extends LitElement {
 
   // private but used in test
   handleCloseTap = () => {
-    // TODO(kaspern): Add a confirm dialog if there are unsaved changes.
+    if (this.content !== this.newContent) {
+      if (!window.confirm('You have unsaved changes. Discard and close?')) {
+        return;
+      }
+    }
+    this.storeTask?.cancel();
+    this.getStorage().eraseEditableContentItem(this.storageKey);
     this.viewEditInChangeView();
   };
 

@@ -353,6 +353,7 @@ suite('gr-editor-view tests', () => {
 
     test('file modification and close', async () => {
       const closeSpy = sinon.spy(element, 'handleCloseTap');
+      sinon.stub(window, 'confirm').returns(true);
       element.newContent = newText;
       await element.updateComplete;
 
@@ -364,6 +365,61 @@ suite('gr-editor-view tests', () => {
       assert.isTrue(closeSpy.called);
       assert.isFalse(saveFileStub.called);
       assert.isTrue(navigateStub.called);
+    });
+
+    test('cancel erases localStorage when there are unsaved changes', async () => {
+      const eraseStub = sinon.stub(storageService, 'eraseEditableContentItem');
+      sinon.stub(window, 'confirm').returns(true);
+      element.newContent = newText;
+      await element.updateComplete;
+
+      element.handleCloseTap();
+
+      assert.isTrue(eraseStub.called);
+      assert.isTrue(navigateStub.called);
+    });
+
+    test('cancel does not navigate when confirm is declined', async () => {
+      sinon.stub(window, 'confirm').returns(false);
+      element.newContent = newText;
+      await element.updateComplete;
+
+      element.handleCloseTap();
+
+      assert.isFalse(navigateStub.called);
+    });
+
+    test('cancel navigates without confirm when no unsaved changes', async () => {
+      const confirmStub = sinon.stub(window, 'confirm');
+      // content === newContent, so no confirm needed
+      await element.updateComplete;
+
+      element.handleCloseTap();
+
+      assert.isFalse(confirmStub.called);
+      assert.isTrue(navigateStub.called);
+    });
+
+    test('cancel cancels pending storeTask', async () => {
+      sinon.stub(window, 'confirm').returns(true);
+      query<GrEndpointDecorator>(element, '#editorEndpoint')!.dispatchEvent(
+        new CustomEvent('content-change', {
+          bubbles: true,
+          composed: true,
+          detail: {value: newText},
+        })
+      );
+      // storeTask is now pending; cancel before it fires
+      element.handleCloseTap();
+
+      assert.isTrue(navigateStub.called);
+      // storeTask should have been cancelled (null or already ran)
+      // The key assertion: storage was erased, not set
+      const storageKey = element.storageKey;
+      assert.isUndefined(
+        testResolver(storageServiceToken).getEditableContentItem(storageKey) ??
+          undefined
+      );
     });
   });
 
