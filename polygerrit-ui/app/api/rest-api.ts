@@ -588,6 +588,19 @@ export declare interface CommentRange {
 }
 
 /**
+ * Information about merge conflicts in a revision.
+ * https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#conflicts-info
+ */
+export declare interface ConflictsInfo {
+  base?: string;
+  ours?: string;
+  theirs?: string;
+  mergeStrategy?: string;
+  noBaseReason?: string;
+  containsConflicts?: boolean;
+}
+
+/**
  * The side on which the comment was added
  * https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-info
  */
@@ -1133,6 +1146,7 @@ export declare interface RevisionInfo {
   push_certificate?: PushCertificateInfo;
   description?: string;
   parents_data?: ParentInfo[];
+  conflicts?: ConflictsInfo;
 }
 
 /**

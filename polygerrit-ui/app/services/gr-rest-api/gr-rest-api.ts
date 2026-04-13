@@ -22,6 +22,7 @@ import {
   CapabilityInfoMap,
   ChangeId,
   ChangeInfo,
+  CommitId,
   ChangeMessageId,
   CommentInfo,
   CommentInput,
@@ -711,7 +712,18 @@ export interface RestApiService extends Finalizable {
   getFileContent(
     changeNum: NumericChangeId,
     path: string,
-    patchNum: PatchSetNum
+    patchNum: PatchSetNum,
+    parent?: number
+  ): Promise<Response | Base64FileContent | undefined>;
+
+  /**
+   * Reads a file at a commit in a project (not tied to a change revision).
+   * https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-content
+   */
+  getProjectCommitFileContent(
+    repo: RepoName,
+    commit: CommitId,
+    path: string
   ): Promise<Response | Base64FileContent | undefined>;
 
   saveChangeEdit(

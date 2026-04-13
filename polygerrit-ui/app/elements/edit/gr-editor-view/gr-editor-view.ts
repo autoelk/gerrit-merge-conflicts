@@ -9,15 +9,21 @@ import '../../shared/gr-button/gr-button';
 import '../../shared/gr-editable-label/gr-editable-label';
 import '../../shared/gr-tooltip-content/gr-tooltip-content';
 import '../gr-default-editor/gr-default-editor';
+import '../gr-merge-editor/gr-merge-editor';
 import {navigationToken} from '../../core/gr-navigation/gr-navigation';
 import {pluginLoaderToken} from '../../shared/gr-js-api-interface/gr-plugin-loader';
 import {
   Base64FileContent,
+  BasePatchSetNum,
   ChangeInfo,
+  CommitId,
   EditPreferencesInfo,
+  EDIT,
+  PatchSetNum,
   RevisionInfo,
   RevisionPatchSetNum,
 } from '../../../types/common';
+import {isBase64FileContent} from '../../../api/rest-api';
 import {ParsedChangeInfo} from '../../../types/types';
 import {HttpMethod, NotifyType} from '../../../constants/constants';
 import {fireAlert, fireReload} from '../../../utils/event-util';
@@ -27,6 +33,8 @@ import {assertIsDefined} from '../../../utils/common-util';
 import {debounce, DelayedTask} from '../../../utils/async-util';
 import {changeIsAbandoned, changeIsMerged} from '../../../utils/change-util';
 import {Modifier} from '../../../utils/dom-util';
+import {findEdit, findEditParentRevision} from '../../../utils/patch-set-util';
+import {textHasConflictMarkers} from '../../../utils/merge-conflict-parser';
 import {sharedStyles} from '../../../styles/shared-styles';
 import {css, html, LitElement, nothing, PropertyValues} from 'lit';
 import {customElement, query, state} from 'lit/decorators.js';
@@ -54,6 +62,25 @@ const PUBLISHING_EDIT_MSG = 'Publishing edit...';
 const PUBLISH_FAILED_MSG = 'Failed to publish edit';
 
 const STORAGE_DEBOUNCE_INTERVAL_MS = 100;
+
+function fileTextFromGetResponse(
+  res: Response | Base64FileContent | undefined
+): string {
+  if (!res || !isBase64FileContent(res)) return '';
+  return res.content ?? '';
+}
+
+/** Each side fetch is isolated so one rejection (parse/network) cannot empty both panes. */
+async function mergeSideTextFromFetch(
+  promise: Promise<Response | Base64FileContent | undefined>
+): Promise<string> {
+  try {
+    const res = await promise;
+    return fileTextFromGetResponse(res);
+  } catch {
+    return '';
+  }
+}
 
 @customElement('gr-editor-view')
 export class GrEditorView extends LitElement {
@@ -92,6 +119,16 @@ export class GrEditorView extends LitElement {
   @state() latestPatchsetNumber?: RevisionPatchSetNum;
 
   @state() private darkMode = false;
+
+  @state() private mergeEditorActive = false;
+
+  @state() private mergeCurrentRef = '';
+
+  @state() private mergeIncomingRef = '';
+
+  @state() private mergeBaseRef = '';
+
+  @state() private showMergeBaseColumn = false;
 
   private readonly restApiService = getAppContext().restApiService;
 
@@ -296,6 +333,7 @@ export class GrEditorView extends LitElement {
 
   private renderEditingOldPatchsetWarning() {
     const patchset = this.viewState?.patchNum;
+    if (this.latestPatchsetNumber === undefined) return nothing;
     if (patchset === this.latestPatchsetNumber) return nothing;
     return html`<span class="warning">&nbsp;(Old Patchset)</span>`;
   }
@@ -324,10 +362,19 @@ export class GrEditorView extends LitElement {
             name="darkMode"
             .value=${this.darkMode}
           ></gr-endpoint-param>
-          <gr-default-editor
-            id="file"
-            .fileContent=${this.newContent}
-          ></gr-default-editor>
+          ${this.mergeEditorActive
+            ? html`<gr-merge-editor
+                id="file"
+                .fileContent=${this.newContent}
+                .currentRef=${this.mergeCurrentRef}
+                .incomingRef=${this.mergeIncomingRef}
+                .baseRef=${this.mergeBaseRef}
+                .showBaseColumn=${this.showMergeBaseColumn}
+              ></gr-merge-editor>`
+            : html`<gr-default-editor
+                id="file"
+                .fileContent=${this.newContent}
+              ></gr-default-editor>`}
         </gr-endpoint-decorator>
       </div>
     `;
@@ -340,6 +387,18 @@ export class GrEditorView extends LitElement {
     if (changedProperties.has('change') || changedProperties.has('type')) {
       this.navigateToChangeIfEditType();
     }
+  }
+
+  override async updated(changedProperties: PropertyValues) {
+    super.updated(changedProperties);
+    if (!changedProperties.has('change')) return;
+    if (this.viewState?.childView !== ChangeChildView.EDIT) return;
+    const changeNum = this.viewState.changeNum;
+    const patchNum = this.viewState.patchNum;
+    const path = this.viewState.editView?.path;
+    if (changeNum === undefined || patchNum === undefined || !path) return;
+    if (this.newContent === undefined) return;
+    await this.loadMergeReferencePanes(path, patchNum, this.newContent);
   }
 
   get storageKey() {
@@ -416,7 +475,7 @@ export class GrEditorView extends LitElement {
 
     return this.restApiService
       .getFileContent(changeNum, path, patchNum)
-      .then(res => {
+      .then(async res => {
         const content = (res && (res as Base64FileContent).content) || '';
         if (
           storedContent &&
@@ -439,7 +498,104 @@ export class GrEditorView extends LitElement {
         } else {
           this.type = '';
         }
+
+        await this.loadMergeReferencePanes(
+          path,
+          patchNum,
+          this.newContent ?? ''
+        );
       });
+  }
+
+  private async loadMergeReferencePanes(
+    path: string,
+    patchNum: PatchSetNum,
+    resultText: string
+  ) {
+    const change = this.change;
+    const mime = this.type ?? '';
+    const useMerge = this.computeMergeEditorActive(mime, resultText, change);
+    this.mergeEditorActive = useMerge;
+    if (!useMerge) {
+      this.mergeCurrentRef = '';
+      this.mergeIncomingRef = '';
+      this.mergeBaseRef = '';
+      this.showMergeBaseColumn = false;
+      return;
+    }
+
+    const editRev = findEdit(Object.values(change?.revisions ?? {}));
+    let basePatchNum = editRev?.basePatchNum;
+    if (
+      basePatchNum === undefined &&
+      patchNum !== EDIT &&
+      typeof patchNum === 'number'
+    ) {
+      basePatchNum = patchNum as BasePatchSetNum;
+    }
+    const mergeRev =
+      basePatchNum !== undefined
+        ? Object.values(change?.revisions ?? {}).find(
+            r => r._number === basePatchNum
+          )
+        : undefined;
+    const repo = change?.project;
+    const conflicts = mergeRev?.conflicts;
+    const baseCommit = conflicts?.base;
+
+    const [currentText, incomingText] =
+      repo && conflicts?.ours && conflicts?.theirs
+        ? await Promise.all([
+            mergeSideTextFromFetch(
+              this.restApiService.getProjectCommitFileContent(
+                repo,
+                conflicts.ours as CommitId,
+                path
+              )
+            ),
+            mergeSideTextFromFetch(
+              this.restApiService.getProjectCommitFileContent(
+                repo,
+                conflicts.theirs as CommitId,
+                path
+              )
+            ),
+          ])
+        : ['', ''];
+
+    const baseText =
+      repo && baseCommit
+        ? await mergeSideTextFromFetch(
+            this.restApiService.getProjectCommitFileContent(
+              repo,
+              baseCommit as CommitId,
+              path
+            )
+          )
+        : '';
+
+    this.mergeCurrentRef = currentText;
+    this.mergeIncomingRef = incomingText;
+    this.mergeBaseRef = baseText;
+    this.showMergeBaseColumn = !!baseCommit;
+  }
+
+  private computeMergeEditorActive(
+    mimeType: string,
+    text: string,
+    change?: ParsedChangeInfo
+  ): boolean {
+    if (mimeType.startsWith('image/')) return false;
+    const markers = textHasConflictMarkers(text);
+    const flag = !!change?.contains_git_conflicts;
+    if (!markers && !flag) return false;
+    if (!change) return markers;
+    const mergeRev = findEditParentRevision(
+      Object.values(change.revisions ?? {})
+    );
+    const parents = mergeRev?.commit?.parents?.length ?? 0;
+    if (parents === 2) return true;
+    return markers;
   }
 
   // private but used in test
