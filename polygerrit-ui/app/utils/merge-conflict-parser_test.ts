@@ -99,6 +99,151 @@ suite('merge-conflict-parser tests', () => {
     });
   });
 
+  suite('parseConflictRegions — complex scenarios', () => {
+    test('captures multi-line ours and theirs blocks', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'line 1',
+        'line 2',
+        'line 3',
+        '=======',
+        'their line 1',
+        'their line 2',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const [r] = parseConflictRegions(text);
+      assert.equal(r.kind, '2way');
+      assert.equal(r.ours, 'line 1\nline 2\nline 3\n');
+      assert.equal(r.theirs, 'their line 1\ntheir line 2\n');
+    });
+
+    test('handles empty ours side', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        '=======',
+        'theirs only',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const [r] = parseConflictRegions(text);
+      assert.equal(r.ours, '');
+      assert.equal(r.theirs, 'theirs only\n');
+    });
+
+    test('handles empty theirs side', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'ours only',
+        '=======',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const [r] = parseConflictRegions(text);
+      assert.equal(r.ours, 'ours only\n');
+      assert.equal(r.theirs, '');
+    });
+
+    test('handles diff3 with empty base section', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'ours',
+        '||||||| base',
+        '=======',
+        'theirs',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const [r] = parseConflictRegions(text);
+      assert.equal(r.kind, 'diff3');
+      assert.equal(r.base, '');
+      assert.equal(r.ours, 'ours\n');
+      assert.equal(r.theirs, 'theirs\n');
+    });
+
+    test('conflict at start of file (no prefix bytes)', () => {
+      const regions = parseConflictRegions(TWO_WAY);
+      assert.equal(regions[0].start, 0);
+    });
+
+    test('conflict at EOF without trailing newline after >>>>>>>', () => {
+      const text = '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch';
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 1);
+      assert.equal(regions[0].end, text.length);
+    });
+
+    test('adjacent conflicts with no text between them', () => {
+      const text = TWO_WAY + TWO_WAY;
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 2);
+      // Second conflict starts exactly where the first ends
+      assert.equal(regions[1].start, regions[0].end);
+    });
+
+    test('mixed 2-way and diff3 conflicts in same file', () => {
+      const text = TWO_WAY + 'separator\n' + DIFF3 + 'end\n';
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 2);
+      assert.equal(regions[0].kind, '2way');
+      assert.equal(regions[1].kind, 'diff3');
+      assert.isUndefined(regions[0].base);
+      assert.isDefined(regions[1].base);
+    });
+
+    test('five consecutive conflicts — all parsed and offsets are non-overlapping', () => {
+      const block = TWO_WAY;
+      const text = Array.from({length: 5}, (_, i) => `ctx${i}\n` + block).join('');
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 5);
+      for (let i = 1; i < regions.length; i++) {
+        assert.isAtLeast(regions[i].start, regions[i - 1].end);
+      }
+      // Each sliced region round-trips back to the original block
+      regions.forEach(r => {
+        assert.equal(text.slice(r.start, r.end), block);
+      });
+    });
+
+    test('recovers after nested <<<<<< opener inside ours block', () => {
+      // Parser should skip the malformed first block and find the clean second one
+      const text = [
+        '<<<<<<< HEAD',
+        'before nested',
+        '<<<<<<< HEAD',   // nested opener — parser aborts first block, jumps here
+        'ours clean',
+        '=======',
+        'theirs clean',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const regions = parseConflictRegions(text);
+      // The parser jumps to the inner <<<<<<< and parses from there
+      assert.equal(regions.length, 1);
+      assert.equal(regions[0].ours, 'ours clean\n');
+      assert.equal(regions[0].theirs, 'theirs clean\n');
+    });
+
+    test('content resembling a marker inside diff3 base does not break parsing', () => {
+      // A line that starts with ======= inside the base section of a diff3 block
+      // should terminate the base collection, just like a real separator would.
+      // This is consistent with how Git itself handles it.
+      const text = [
+        '<<<<<<< HEAD',
+        'ours',
+        '||||||| base',
+        'base line',
+        '=======',
+        'theirs',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 1);
+      assert.equal(regions[0].base, 'base line\n');
+    });
+  });
+
   suite('applyConflictChoice', () => {
     test('current replaces conflict block with ours', () => {
       const result = applyConflictChoice(

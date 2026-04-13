@@ -228,6 +228,162 @@ suite('gr-merge-editor tests', () => {
     });
   });
 
+  suite('complex resolution workflows', () => {
+    const THREE_CONFLICTS =
+      TWO_WAY_A + 'between AB\n' + TWO_WAY_B + 'between BC\n' + [
+        '<<<<<<< HEAD',
+        'ours C',
+        '=======',
+        'theirs C',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+
+    const DIFF3_CONFLICT = [
+      '<<<<<<< HEAD',
+      'ours diff3',
+      '||||||| base',
+      'base diff3',
+      '=======',
+      'theirs diff3',
+      '>>>>>>> branch',
+      '',
+    ].join('\n');
+
+    test('resolving last conflict clamps activeConflictIndex down', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      // Navigate to conflict 2 (index 1)
+      btn(element, 'Next conflict').click();
+      await element.updateComplete;
+      let badge = element.shadowRoot!.querySelector('.conflict-badge')!;
+      assert.include(badge.textContent, '2 / 2');
+      // Resolve it — only 1 conflict remains, index should clamp to 0
+      element.applyChoice('current');
+      await element.updateComplete;
+      badge = element.shadowRoot!.querySelector('.conflict-badge')!;
+      assert.include(badge.textContent, '1 / 1');
+    });
+
+    test('resolving middle conflict of 3 preserves surrounding text', async () => {
+      element.fileContent = THREE_CONFLICTS;
+      await element.updateComplete;
+      // Navigate to conflict 2
+      btn(element, 'Next conflict').click();
+      await element.updateComplete;
+      element.applyChoice('current');
+      await element.updateComplete;
+      // Conflict B (index 1) should be gone; A and C remain
+      assert.include(element.fileContent, 'ours B\n');
+      assert.include(element.fileContent, 'between AB\n');
+      assert.include(element.fileContent, 'between BC\n');
+      // The remaining content should still have 2 conflict markers
+      const remaining = element.fileContent;
+      assert.equal(remaining.split('<<<<<<<').length - 1, 2);
+    });
+
+    test('step-by-step: resolve all 3 conflicts one at a time via navigation', async () => {
+      element.fileContent = THREE_CONFLICTS;
+      await element.updateComplete;
+
+      // Resolve conflict 1 (current)
+      element.applyChoice('current');
+      await element.updateComplete;
+      assert.include(element.shadowRoot!.querySelector('.conflict-badge')!.textContent, '1 / 2');
+
+      // Resolve conflict 1 again (now the old conflict 2, current index still 0)
+      element.applyChoice('incoming');
+      await element.updateComplete;
+      assert.include(element.shadowRoot!.querySelector('.conflict-badge')!.textContent, '1 / 1');
+
+      // Resolve last conflict
+      element.applyChoice('current');
+      await element.updateComplete;
+      assert.isTrue(element.shadowRoot!.querySelector('.conflict-badge')!.classList.contains('resolved'));
+      assert.equal(element.fileContent, 'ours A\nbetween AB\ntheirs B\nbetween BC\nours C\n');
+    });
+
+    test('fileContent property change while at out-of-bounds index clamps correctly', async () => {
+      element.fileContent = THREE_CONFLICTS;
+      await element.updateComplete;
+      // Jump to last conflict (index 2)
+      btn(element, 'Next conflict').click();
+      btn(element, 'Next conflict').click();
+      await element.updateComplete;
+      assert.include(element.shadowRoot!.querySelector('.conflict-badge')!.textContent, '3 / 3');
+      // Replace content with a file that only has 1 conflict
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+      // Index should have clamped to 0
+      assert.include(element.shadowRoot!.querySelector('.conflict-badge')!.textContent, '1 / 1');
+    });
+
+    test('diff3 conflict: Accept Current picks ours, not base or theirs', async () => {
+      element.fileContent = DIFF3_CONFLICT;
+      await element.updateComplete;
+      element.applyChoice('current');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours diff3\n');
+    });
+
+    test('diff3 conflict: Accept Incoming picks theirs, not base or ours', async () => {
+      element.fileContent = DIFF3_CONFLICT;
+      await element.updateComplete;
+      element.applyChoice('incoming');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'theirs diff3\n');
+    });
+
+    test('manual textarea edit that introduces a new conflict is detected', async () => {
+      element.fileContent = 'clean file\n';
+      await element.updateComplete;
+      assert.isTrue(
+        element.shadowRoot!.querySelector('.conflict-badge')!.classList.contains('resolved')
+      );
+      // Simulate a user manually typing conflict markers in the result textarea
+      const ta = element.shadowRoot!.querySelector<HTMLTextAreaElement>('#result')!;
+      ta.value = TWO_WAY_A;
+      ta.dispatchEvent(new Event('input'));
+      await element.updateComplete;
+      assert.isTrue(
+        element.shadowRoot!.querySelector('.conflict-badge')!.classList.contains('has-conflicts')
+      );
+    });
+
+    test('Accept All then manual reintroduction of a conflict updates badge', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyAllChoices('current');
+      await element.updateComplete;
+      assert.isTrue(
+        element.shadowRoot!.querySelector('.conflict-badge')!.classList.contains('resolved')
+      );
+      // Manually reintroduce a conflict via textarea
+      const ta = element.shadowRoot!.querySelector<HTMLTextAreaElement>('#result')!;
+      ta.value = element.fileContent + TWO_WAY_B;
+      ta.dispatchEvent(new Event('input'));
+      await element.updateComplete;
+      const badge = element.shadowRoot!.querySelector('.conflict-badge')!;
+      assert.isTrue(badge.classList.contains('has-conflicts'));
+      assert.include(badge.textContent, '1 / 1');
+    });
+
+    test('mixed: Accept Current for first, Accept Incoming for second', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      // Resolve first with current
+      element.applyChoice('current');
+      await element.updateComplete;
+      // Resolve remaining (was second, now first) with incoming
+      element.applyChoice('incoming');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours A\nmiddle\ntheirs B\n');
+      assert.isTrue(
+        element.shadowRoot!.querySelector('.conflict-badge')!.classList.contains('resolved')
+      );
+    });
+  });
+
   suite('scroll sync', () => {
     test('scroll handler propagates to other panes', async () => {
       element.fileContent = TWO_WAY_A;
