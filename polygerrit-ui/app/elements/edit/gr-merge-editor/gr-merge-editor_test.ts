@@ -384,6 +384,310 @@ suite('gr-merge-editor tests', () => {
     });
   });
 
+  suite('Accept Both', () => {
+    setup(async () => {
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+    });
+
+    test('Accept Both (current-first) gives ours then theirs', async () => {
+      element.applyBoth('current-first');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours A\ntheirs A\n');
+    });
+
+    test('Accept Both (incoming-first) gives theirs then ours', async () => {
+      element.applyBoth('incoming-first');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'theirs A\nours A\n');
+    });
+
+    test('Accept Both fires content-change', () => {
+      const spy = sinon.spy();
+      element.addEventListener('content-change', spy);
+      element.applyBoth('current-first');
+      assert.isTrue(spy.calledOnce);
+      assert.equal(
+        (spy.firstCall.args[0] as CustomEvent<{value: string}>).detail.value,
+        'ours A\ntheirs A\n'
+      );
+    });
+
+    test('Accept Both button disabled when no conflicts', async () => {
+      element.fileContent = 'no conflicts';
+      await element.updateComplete;
+      assert.isTrue(
+        btn(element, 'Accept both sides: Current first').hasAttribute('disabled')
+      );
+      assert.isTrue(
+        btn(element, 'Accept both sides: Incoming first').hasAttribute('disabled')
+      );
+    });
+
+    test('Accept Both resolves only the active conflict, leaves others intact', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyBoth('current-first');
+      await element.updateComplete;
+      assert.include(element.fileContent, 'ours A\ntheirs A\n');
+      // Second conflict still present
+      assert.equal(element.fileContent.split('<<<<<<<').length - 1, 1);
+    });
+
+    test('diff3 Accept Both (current-first) uses ours and theirs, not base', async () => {
+      const DIFF3_CONFLICT = [
+        '<<<<<<< HEAD',
+        'ours diff3',
+        '||||||| base',
+        'base diff3',
+        '=======',
+        'theirs diff3',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      element.fileContent = DIFF3_CONFLICT;
+      await element.updateComplete;
+      element.applyBoth('current-first');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours diff3\ntheirs diff3\n');
+    });
+  });
+
+  suite('word-wrap toggle', () => {
+    test('word wrap off by default — no wrap class on #panes', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      assert.isFalse(
+        element.shadowRoot!.querySelector('#panes')!.classList.contains('wrap')
+      );
+    });
+
+    test('clicking toggle adds wrap class to #panes', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      btn(element, 'Toggle word wrap').click();
+      await element.updateComplete;
+      assert.isTrue(
+        element.shadowRoot!.querySelector('#panes')!.classList.contains('wrap')
+      );
+    });
+
+    test('clicking toggle twice removes wrap class', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      btn(element, 'Toggle word wrap').click();
+      await element.updateComplete;
+      btn(element, 'Toggle word wrap').click();
+      await element.updateComplete;
+      assert.isFalse(
+        element.shadowRoot!.querySelector('#panes')!.classList.contains('wrap')
+      );
+    });
+
+    test('wrap and four classes coexist when both active', async () => {
+      element.showBaseColumn = true;
+      element.fileContent = '';
+      await element.updateComplete;
+      btn(element, 'Toggle word wrap').click();
+      await element.updateComplete;
+      const cl = element.shadowRoot!.querySelector('#panes')!.classList;
+      assert.isTrue(cl.contains('wrap'));
+      assert.isTrue(cl.contains('four'));
+    });
+  });
+
+  suite('progress indicator', () => {
+    test('progress bar not rendered when file has no conflicts', async () => {
+      element.fileContent = 'clean file\n';
+      await element.updateComplete;
+      assert.isNull(element.shadowRoot!.querySelector('.progress-bar'));
+    });
+
+    test('progress bar rendered when fileContent has conflicts', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      assert.isNotNull(element.shadowRoot!.querySelector('.progress-bar'));
+    });
+
+    test('progress fill starts at 0%', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      const fill =
+        element.shadowRoot!.querySelector<HTMLElement>('.progress-fill')!;
+      assert.equal(fill.style.width, '0%');
+    });
+
+    test('progress fill reaches 50% after resolving 1 of 2', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyChoice('current');
+      await element.updateComplete;
+      const fill =
+        element.shadowRoot!.querySelector<HTMLElement>('.progress-fill')!;
+      assert.equal(fill.style.width, '50%');
+    });
+
+    test('progress fill reaches 100% after all conflicts resolved', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyAllChoices('current');
+      await element.updateComplete;
+      const fill =
+        element.shadowRoot!.querySelector<HTMLElement>('.progress-fill')!;
+      assert.equal(fill.style.width, '100%');
+    });
+
+    test('badge shows "All N resolved" when all conflicts resolved', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyAllChoices('current');
+      await element.updateComplete;
+      const badge = element.shadowRoot!.querySelector('.conflict-badge')!;
+      assert.isTrue(badge.classList.contains('resolved'));
+      assert.include(badge.textContent, 'All 2 resolved');
+    });
+
+    test('progress resets when fileContent assigned externally mid-session', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      element.applyChoice('current');
+      await element.updateComplete;
+      // External reassignment — resets baseline to new conflict count
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+      const fill =
+        element.shadowRoot!.querySelector<HTMLElement>('.progress-fill')!;
+      assert.equal(fill.style.width, '0%');
+    });
+  });
+
+  suite('shortcut legend', () => {
+    test('legend element exists in DOM', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      assert.isNotNull(element.shadowRoot!.querySelector('.shortcut-legend'));
+    });
+
+    test('legend summary contains "Shortcuts" label', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      const summary =
+        element.shadowRoot!.querySelector('.shortcut-legend summary')!;
+      assert.isNotNull(summary);
+      assert.include(summary.textContent, 'Shortcuts');
+    });
+
+    test('legend table contains all six shortcuts', async () => {
+      element.fileContent = '';
+      await element.updateComplete;
+      const legend = element.shadowRoot!.querySelector('.shortcut-legend')!;
+      const text = legend.textContent!;
+      for (const key of ['Alt+C', 'Alt+I', 'Alt+B', 'Alt+N', 'Alt+P', 'Alt+U']) {
+        assert.include(text, key, `shortcut ${key} missing from legend`);
+      }
+    });
+  });
+
+  suite('undo', () => {
+    setup(async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+    });
+
+    test('undo button disabled initially', () => {
+      assert.isTrue(
+        btn(element, 'Undo last conflict').hasAttribute('disabled')
+      );
+    });
+
+    test('undo button enabled after applyChoice', async () => {
+      element.applyChoice('current');
+      await element.updateComplete;
+      assert.isFalse(
+        btn(element, 'Undo last conflict').hasAttribute('disabled')
+      );
+    });
+
+    test('undo restores previous fileContent', async () => {
+      const original = element.fileContent;
+      element.applyChoice('current');
+      await element.updateComplete;
+      element.undo();
+      await element.updateComplete;
+      assert.equal(element.fileContent, original);
+    });
+
+    test('undo fires content-change with the restored content', async () => {
+      const original = element.fileContent;
+      element.applyChoice('current');
+      await element.updateComplete;
+      const events: string[] = [];
+      element.addEventListener('content-change', (e: Event) => {
+        events.push((e as CustomEvent<{value: string}>).detail.value);
+      });
+      element.undo();
+      assert.equal(events[0], original);
+    });
+
+    test('undo button becomes disabled again after stack is exhausted', async () => {
+      element.applyChoice('current');
+      await element.updateComplete;
+      element.undo();
+      await element.updateComplete;
+      assert.isTrue(
+        btn(element, 'Undo last conflict').hasAttribute('disabled')
+      );
+    });
+
+    test('multiple undos restore intermediate states in reverse order', async () => {
+      element.applyChoice('current');
+      await element.updateComplete;
+      const afterFirst = element.fileContent;
+      element.applyChoice('incoming');
+      await element.updateComplete;
+      // Undo second resolution
+      element.undo();
+      await element.updateComplete;
+      assert.equal(element.fileContent, afterFirst);
+      // Undo first resolution
+      element.undo();
+      await element.updateComplete;
+      assert.equal(element.fileContent, TWO_CONFLICTS);
+    });
+
+    test('applyAllChoices counts as a single undo entry', async () => {
+      const original = element.fileContent;
+      element.applyAllChoices('current');
+      await element.updateComplete;
+      element.undo();
+      await element.updateComplete;
+      assert.equal(element.fileContent, original);
+      // One undo was enough — stack now empty
+      assert.isTrue(
+        btn(element, 'Undo last conflict').hasAttribute('disabled')
+      );
+    });
+
+    test('applyBoth pushes to undo stack', async () => {
+      const original = element.fileContent;
+      element.applyBoth('current-first');
+      await element.updateComplete;
+      element.undo();
+      await element.updateComplete;
+      assert.equal(element.fileContent, original);
+    });
+
+    test('external fileContent assignment clears the undo stack', async () => {
+      element.applyChoice('current');
+      await element.updateComplete;
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+      assert.isTrue(
+        btn(element, 'Undo last conflict').hasAttribute('disabled')
+      );
+    });
+  });
+
   suite('scroll sync', () => {
     test('scroll handler propagates to other panes', async () => {
       element.fileContent = TWO_WAY_A;

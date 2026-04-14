@@ -142,3 +142,13 @@ export function applyConflictChoice(
   const replacement = side === 'current' ? region.ours : region.theirs;
   return text.slice(0, region.start) + replacement + text.slice(region.end);
 }
+
+export function applyBothChoice(
+  text: string,
+  region: ConflictRegion,
+  order: 'current-first' | 'incoming-first'
+): string {
+  const first = order === 'current-first' ? region.ours : region.theirs;
+  const second = order === 'current-first' ? region.theirs : region.ours;
+  return text.slice(0, region.start) + first + second + text.slice(region.end);
+}

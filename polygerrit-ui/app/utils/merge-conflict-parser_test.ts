@@ -6,6 +6,7 @@
 import {assert} from '@open-wc/testing';
 import '../test/common-test-setup';
 import {
+  applyBothChoice,
   applyConflictChoice,
   parseConflictRegions,
   textHasConflictMarkers,
@@ -241,6 +242,74 @@ suite('merge-conflict-parser tests', () => {
       const regions = parseConflictRegions(text);
       assert.equal(regions.length, 1);
       assert.equal(regions[0].base, 'base line\n');
+    });
+  });
+
+  suite('applyBothChoice', () => {
+    test('current-first concatenates ours then theirs', () => {
+      const region = parseConflictRegions(TWO_WAY)[0];
+      assert.equal(
+        applyBothChoice(TWO_WAY, region, 'current-first'),
+        'ours line\ntheirs line\n'
+      );
+    });
+
+    test('incoming-first concatenates theirs then ours', () => {
+      const region = parseConflictRegions(TWO_WAY)[0];
+      assert.equal(
+        applyBothChoice(TWO_WAY, region, 'incoming-first'),
+        'theirs line\nours line\n'
+      );
+    });
+
+    test('applies to correct region when prefix present', () => {
+      const text = 'before\n' + TWO_WAY;
+      const region = parseConflictRegions(text)[0];
+      assert.equal(
+        applyBothChoice(text, region, 'current-first'),
+        'before\nours line\ntheirs line\n'
+      );
+    });
+
+    test('current-first with empty ours produces only theirs', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        '=======',
+        'theirs only',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const region = parseConflictRegions(text)[0];
+      assert.equal(applyBothChoice(text, region, 'current-first'), 'theirs only\n');
+    });
+
+    test('incoming-first with empty theirs produces only ours', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'ours only',
+        '=======',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const region = parseConflictRegions(text)[0];
+      assert.equal(applyBothChoice(text, region, 'incoming-first'), 'ours only\n');
+    });
+
+    test('diff3 current-first uses ours and theirs, not base', () => {
+      const region = parseConflictRegions(DIFF3)[0];
+      const result = applyBothChoice(DIFF3, region, 'current-first');
+      assert.equal(result, 'ours line\ntheirs line\n');
+      assert.notInclude(result, 'base line');
+    });
+
+    test('works with multiple conflicts — applies only to the given region', () => {
+      const text = TWO_WAY + 'mid\n' + TWO_WAY;
+      const regions = parseConflictRegions(text);
+      const result = applyBothChoice(text, regions[0], 'current-first');
+      // First conflict replaced; second conflict still present
+      assert.equal(result.split('<<<<<<<').length - 1, 1);
+      assert.include(result, 'ours line\ntheirs line\n');
+      assert.include(result, 'mid\n');
     });
   });
 
