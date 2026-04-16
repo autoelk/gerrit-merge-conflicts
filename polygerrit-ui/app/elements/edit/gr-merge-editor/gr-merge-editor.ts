@@ -132,10 +132,15 @@ export class GrMergeEditor extends LitElement {
         .top-row {
           display: flex;
           gap: var(--spacing-m);
+          width: 100%;
+        }
+        .top-row .column {
+          flex: 1;
         }
         .bottom-row {
           display: flex;
           margin-top: var(--spacing-m);
+          width: 100%;
         }
         .bottom-row .column {
           flex: 1;
