@@ -123,14 +123,22 @@ export class GrMergeEditor extends LitElement {
           display: block;
         }
         #panes {
-          display: grid;
+          display: flex;
+          flex-direction: column;
           gap: var(--spacing-m);
-          grid-template-columns: repeat(var(--merge-cols, 3), minmax(0, 1fr));
           margin: 0 var(--spacing-l);
           min-height: 60vh;
         }
-        #panes.four {
-          --merge-cols: 4;
+        .top-row {
+          display: flex;
+          gap: var(--spacing-m);
+        }
+        .bottom-row {
+          display: flex;
+          margin-top: var(--spacing-m);
+        }
+        .bottom-row .column {
+          flex: 1;
         }
         .column {
           display: flex;
@@ -339,39 +347,43 @@ export class GrMergeEditor extends LitElement {
               </div>
             `
           : ''}
-        <div class="column current">
-          <header>
-            Current
-            <span class="hint">This patch set's first parent</span>
-          </header>
-          <textarea
-            class="merge-pane"
-            readonly
-            .value=${this.currentRef}
-            @scroll=${this.handleScroll}
-          ></textarea>
+        <div class="top-row">
+          <div class="column current">
+            <header>
+              Current
+              <span class="hint">This patch set's first parent</span>
+            </header>
+            <textarea
+              class="merge-pane"
+              readonly
+              .value=${this.currentRef}
+              @scroll=${this.handleScroll}
+            ></textarea>
+          </div>
+          <div class="column incoming">
+            <header>
+              Incoming
+              <span class="hint">This patch set's second parent</span>
+            </header>
+            <textarea
+              class="merge-pane"
+              readonly
+              .value=${this.incomingRef}
+              @scroll=${this.handleScroll}
+            ></textarea>
+          </div>
         </div>
-        <div class="column incoming">
-          <header>
-            Incoming
-            <span class="hint">This patch set's second parent</span>
-          </header>
-          <textarea
-            class="merge-pane"
-            readonly
-            .value=${this.incomingRef}
-            @scroll=${this.handleScroll}
-          ></textarea>
-        </div>
-        <div class="column result">
-          <header>Result <span class="hint">Your edit (saved)</span></header>
-          <textarea
-            id="result"
-            class="merge-pane"
-            .value=${this.fileContent}
-            @input=${this.handleResultInput}
-            @scroll=${this.handleScroll}
-          ></textarea>
+        <div class="bottom-row">
+          <div class="column result">
+            <header>Result <span class="hint">Your edit (saved)</span></header>
+            <textarea
+              id="result"
+              class="merge-pane"
+              .value=${this.fileContent}
+              @input=${this.handleResultInput}
+              @scroll=${this.handleScroll}
+            ></textarea>
+          </div>
         </div>
       </div>
       <div class="toolbar">
