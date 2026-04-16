@@ -331,22 +331,6 @@ export class GrMergeEditor extends LitElement {
 
     return html`
       <div id="panes" class=${paneClasses}>
-        ${this.showBaseColumn
-          ? html`
-              <div class="column base">
-                <header>
-                  Base
-                  <span class="hint">Common ancestor (when available)</span>
-                </header>
-                <textarea
-                  class="merge-pane"
-                  readonly
-                  .value=${this.baseRef}
-                  @scroll=${this.handleScroll}
-                ></textarea>
-              </div>
-            `
-          : ''}
         <div class="top-row">
           <div class="column current">
             <header>
