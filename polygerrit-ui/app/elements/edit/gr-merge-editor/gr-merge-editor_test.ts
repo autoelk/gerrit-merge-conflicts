@@ -6,10 +6,10 @@
 import * as sinon from 'sinon';
 import '../../../test/common-test-setup';
 import './gr-merge-editor';
-import {GrMergeEditor} from './gr-merge-editor';
-import {assert, fixture, html} from '@open-wc/testing';
-import {query, queryAll} from '../../../test/test-utils';
-import {GrButton} from '../../shared/gr-button/gr-button';
+import { GrMergeEditor } from './gr-merge-editor';
+import { assert, fixture, html } from '@open-wc/testing';
+import { query, queryAll } from '../../../test/test-utils';
+import { GrButton } from '../../shared/gr-button/gr-button';
 
 const TWO_WAY_A = [
   '<<<<<<< HEAD',
@@ -108,7 +108,7 @@ suite('gr-merge-editor tests', () => {
     test('Accept Current resolves conflict with ours', async () => {
       const events: string[] = [];
       element.addEventListener('content-change', (e: Event) => {
-        events.push((e as CustomEvent<{value: string}>).detail.value);
+        events.push((e as CustomEvent<{ value: string }>).detail.value);
       });
       btn(element, 'Keep the Current').click();
       await element.updateComplete;
@@ -119,7 +119,7 @@ suite('gr-merge-editor tests', () => {
     test('Accept Incoming resolves conflict with theirs', async () => {
       const events: string[] = [];
       element.addEventListener('content-change', (e: Event) => {
-        events.push((e as CustomEvent<{value: string}>).detail.value);
+        events.push((e as CustomEvent<{ value: string }>).detail.value);
       });
       btn(element, 'Keep the Incoming').click();
       await element.updateComplete;
@@ -222,7 +222,7 @@ suite('gr-merge-editor tests', () => {
       ta.dispatchEvent(new Event('input'));
       assert.isTrue(spy.calledOnce);
       assert.equal(
-        (spy.firstCall.args[0] as CustomEvent<{value: string}>).detail.value,
+        (spy.firstCall.args[0] as CustomEvent<{ value: string }>).detail.value,
         'changed\n'
       );
     });
@@ -408,7 +408,7 @@ suite('gr-merge-editor tests', () => {
       element.applyBoth('current-first');
       assert.isTrue(spy.calledOnce);
       assert.equal(
-        (spy.firstCall.args[0] as CustomEvent<{value: string}>).detail.value,
+        (spy.firstCall.args[0] as CustomEvent<{ value: string }>).detail.value,
         'ours A\ntheirs A\n'
       );
     });
@@ -586,6 +586,15 @@ suite('gr-merge-editor tests', () => {
         assert.include(text, key, `shortcut ${key} missing from legend`);
       }
     });
+
+    test('legend popup is anchored above the button', () => {
+      const styles = String(
+        (GrMergeEditor.styles as unknown as { toString(): string })
+      );
+      assert.include(styles, '.shortcut-legend table');
+      assert.include(styles, 'bottom: 100%');
+      assert.notInclude(styles, 'top: 100%');
+    });
   });
 
   suite('undo', () => {
@@ -623,7 +632,7 @@ suite('gr-merge-editor tests', () => {
       await element.updateComplete;
       const events: string[] = [];
       element.addEventListener('content-change', (e: Event) => {
-        events.push((e as CustomEvent<{value: string}>).detail.value);
+        events.push((e as CustomEvent<{ value: string }>).detail.value);
       });
       element.undo();
       assert.equal(events[0], original);

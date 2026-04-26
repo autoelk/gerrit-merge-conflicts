@@ -264,10 +264,14 @@ export class GrMergeEditor extends LitElement {
           border: 1px solid var(--border-color);
           border-radius: 4px;
           border-spacing: 0;
+          bottom: 100%;
+          box-shadow: var(--elevation-level-2, 0 2px 8px rgba(0, 0, 0, 0.2));
+          margin-bottom: var(--spacing-s);
+          max-height: min(50vh, 360px);
+          overflow: auto;
           padding: var(--spacing-s);
           position: absolute;
           right: 0;
-          top: 100%;
           z-index: 10;
         }
         .shortcut-legend td {
