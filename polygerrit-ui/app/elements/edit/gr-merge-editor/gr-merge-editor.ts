@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import '../../shared/gr-button/gr-button';
-import {sharedStyles} from '../../../styles/shared-styles';
-import {css, html, LitElement, PropertyValues} from 'lit';
-import {customElement, property, query, state} from 'lit/decorators.js';
-import {fire} from '../../../utils/event-util';
-import {Modifier} from '../../../utils/dom-util';
-import {ShortcutController} from '../../lit/shortcut-controller';
+import { sharedStyles } from '../../../styles/shared-styles';
+import { css, html, LitElement, PropertyValues } from 'lit';
+import { customElement, property, query, state } from 'lit/decorators.js';
+import { fire } from '../../../utils/event-util';
+import { Modifier } from '../../../utils/dom-util';
+import { ShortcutController } from '../../lit/shortcut-controller';
 import {
   applyBothChoice,
   applyConflictChoice,
@@ -19,12 +19,12 @@ import {
 const UNDO_STACK_LIMIT = 10;
 
 const SHORTCUTS = [
-  {key: 'Alt+C', desc: 'Accept Current'},
-  {key: 'Alt+I', desc: 'Accept Incoming'},
-  {key: 'Alt+B', desc: 'Accept Both (Current first)'},
-  {key: 'Alt+N', desc: 'Next conflict'},
-  {key: 'Alt+P', desc: 'Previous conflict'},
-  {key: 'Alt+U', desc: 'Undo last resolution'},
+  { key: 'Alt+C', desc: 'Accept Current' },
+  { key: 'Alt+I', desc: 'Accept Incoming' },
+  { key: 'Alt+B', desc: 'Accept Both (Current first)' },
+  { key: 'Alt+N', desc: 'Next conflict' },
+  { key: 'Alt+P', desc: 'Previous conflict' },
+  { key: 'Alt+U', desc: 'Undo last resolution' },
 ] as const;
 
 @customElement('gr-merge-editor')
@@ -35,22 +35,22 @@ export class GrMergeEditor extends LitElement {
    * @event content-change
    */
 
-  @property({type: String})
+  @property({ type: String })
   fileContent = '';
 
   /** Parent 1 ("Current") file text for context */
-  @property({type: String})
+  @property({ type: String })
   currentRef = '';
 
   /** Parent 2 ("Incoming") file text for context */
-  @property({type: String})
+  @property({ type: String })
   incomingRef = '';
 
   /** Optional merge base column */
-  @property({type: String})
+  @property({ type: String })
   baseRef = '';
 
-  @property({type: Boolean})
+  @property({ type: Boolean })
   showBaseColumn = false;
 
   @query('#panes')
@@ -92,25 +92,25 @@ export class GrMergeEditor extends LitElement {
   constructor() {
     super();
     this.shortcuts.addLocal(
-      {key: 'c', modifiers: [Modifier.ALT_KEY]},
+      { key: 'c', modifiers: [Modifier.ALT_KEY] },
       () => this.applyChoice('current')
     );
     this.shortcuts.addLocal(
-      {key: 'i', modifiers: [Modifier.ALT_KEY]},
+      { key: 'i', modifiers: [Modifier.ALT_KEY] },
       () => this.applyChoice('incoming')
     );
     this.shortcuts.addLocal(
-      {key: 'b', modifiers: [Modifier.ALT_KEY]},
+      { key: 'b', modifiers: [Modifier.ALT_KEY] },
       () => this.applyBoth('current-first')
     );
-    this.shortcuts.addLocal({key: 'n', modifiers: [Modifier.ALT_KEY]}, () =>
+    this.shortcuts.addLocal({ key: 'n', modifiers: [Modifier.ALT_KEY] }, () =>
       this.onNext()
     );
-    this.shortcuts.addLocal({key: 'p', modifiers: [Modifier.ALT_KEY]}, () =>
+    this.shortcuts.addLocal({ key: 'p', modifiers: [Modifier.ALT_KEY] }, () =>
       this.onPrevious()
     );
     this.shortcuts.addLocal(
-      {key: 'u', modifiers: [Modifier.ALT_KEY]},
+      { key: 'u', modifiers: [Modifier.ALT_KEY] },
       () => this.undo()
     );
   }
@@ -177,8 +177,11 @@ export class GrMergeEditor extends LitElement {
           border-left-color: var(--warning-foreground, #e37400);
         }
         textarea {
+          background-color: var(--view-background-color);
           border: 1px solid var(--border-color);
           box-sizing: border-box;
+          caret-color: var(--primary-text-color);
+          color: var(--primary-text-color);
           flex: 1;
           font-family: var(--monospace-font-family);
           font-size: var(--font-size-code);
@@ -324,9 +327,8 @@ export class GrMergeEditor extends LitElement {
 
     const badge = hasConflict
       ? html`<span class="conflict-badge has-conflicts"
-            >${conflictNum} / ${conflicts.length} conflict${
-              conflicts.length > 1 ? 's' : ''
-            }</span
+            >${conflictNum} / ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''
+        }</span
           >`
       : this.initialConflictCount > 0
         ? html`<span class="conflict-badge resolved"
@@ -378,7 +380,7 @@ export class GrMergeEditor extends LitElement {
       <div class="toolbar">
         <span class="status">${badge}</span>
         ${showProgress
-          ? html`<div
+        ? html`<div
                 class="progress-bar"
                 title="${resolvedCount} of ${this.initialConflictCount} resolved"
               >
@@ -387,7 +389,7 @@ export class GrMergeEditor extends LitElement {
                   style="width: ${progressPct}%"
                 ></div>
               </div>`
-          : ''}
+        : ''}
         <gr-button
           ?disabled=${!hasConflict}
           link=""
@@ -439,7 +441,7 @@ export class GrMergeEditor extends LitElement {
         >
         <gr-button
           ?disabled=${!hasConflict ||
-          this.activeConflictIndex >= conflicts.length - 1}
+      this.activeConflictIndex >= conflicts.length - 1}
           link=""
           @click=${this.onNext}
           title="Next conflict (Alt+N)"
@@ -462,13 +464,13 @@ export class GrMergeEditor extends LitElement {
           <summary>\u2328 Shortcuts</summary>
           <table>
             ${SHORTCUTS.map(
-              ({key, desc}) => html`
+        ({ key, desc }) => html`
                 <tr>
                   <td>${key}</td>
                   <td>${desc}</td>
                 </tr>
               `
-            )}
+      )}
           </table>
         </details>
       </div>
@@ -492,7 +494,7 @@ export class GrMergeEditor extends LitElement {
   private handleResultInput(e: Event) {
     const value = (e.target as HTMLTextAreaElement).value;
     this.fileContent = value;
-    fire(this, 'content-change', {value});
+    fire(this, 'content-change', { value });
   }
 
   private onAcceptCurrent = () => {
@@ -539,7 +541,7 @@ export class GrMergeEditor extends LitElement {
     this._internalUpdate = true;
     const merged = applyConflictChoice(this.fileContent, cur, side);
     this.fileContent = merged;
-    fire(this, 'content-change', {value: merged});
+    fire(this, 'content-change', { value: merged });
     const nextConflicts = parseConflictRegions(merged);
     if (nextConflicts.length === 0) {
       this.activeConflictIndex = 0;
@@ -559,7 +561,7 @@ export class GrMergeEditor extends LitElement {
       text = applyConflictChoice(text, conflicts[i], side);
     }
     this.fileContent = text;
-    fire(this, 'content-change', {value: text});
+    fire(this, 'content-change', { value: text });
     this.activeConflictIndex = 0;
   }
 
@@ -572,7 +574,7 @@ export class GrMergeEditor extends LitElement {
     this._internalUpdate = true;
     const merged = applyBothChoice(this.fileContent, cur, order);
     this.fileContent = merged;
-    fire(this, 'content-change', {value: merged});
+    fire(this, 'content-change', { value: merged });
     const nextConflicts = parseConflictRegions(merged);
     if (nextConflicts.length === 0) {
       this.activeConflictIndex = 0;
@@ -587,7 +589,7 @@ export class GrMergeEditor extends LitElement {
     if (prev === undefined) return;
     this._internalUpdate = true;
     this.fileContent = prev;
-    fire(this, 'content-change', {value: prev});
+    fire(this, 'content-change', { value: prev });
     // undoStack mutation isn't reactive — request re-render so the button
     // disabled state reflects the new (smaller) stack.
     this.requestUpdate();
