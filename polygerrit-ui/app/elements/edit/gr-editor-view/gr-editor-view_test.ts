@@ -16,13 +16,18 @@ import {
   stubRestApi,
 } from '../../../test/test-utils';
 import {
+  BasePatchSetNum,
+  CommitId,
   EDIT,
   NumericChangeId,
   RevisionPatchSetNum,
 } from '../../../types/common';
 import {
+  createEditRevision,
   createChangeViewChange,
   createEditViewState,
+  createParsedChange,
+  createRevision,
 } from '../../../test/test-data-generators';
 import {GrEndpointDecorator} from '../../plugins/gr-endpoint-decorator/gr-endpoint-decorator';
 import {GrDefaultEditor} from '../gr-default-editor/gr-default-editor';
@@ -656,6 +661,157 @@ suite('gr-editor-view tests', () => {
         editView: {path: 'test'},
       };
       assert.equal(element.storageKey, 'c1_ps1_test');
+    });
+  });
+
+  suite('merge editor integration', () => {
+    const conflictText = [
+      '<<<<<<< HEAD',
+      'ours line',
+      '=======',
+      'theirs line',
+      '>>>>>>> branch',
+      '',
+    ].join('\n');
+
+    function setMergeChange(withTwoParents = true) {
+      const ps2 = createRevision(2);
+      ps2.commit = {
+        ...(ps2.commit ?? {parents: []}),
+        parents: withTwoParents
+          ? [
+              {commit: 'parent-1' as CommitId, subject: 'parent 1'},
+              {commit: 'parent-2' as CommitId, subject: 'parent 2'},
+            ]
+          : [{commit: 'parent-1' as CommitId, subject: 'parent 1'}],
+      };
+      ps2.conflicts = {
+        ours: 'ours-sha' as CommitId,
+        theirs: 'theirs-sha' as CommitId,
+        base: 'base-sha' as CommitId,
+        containsConflicts: true,
+      };
+
+      element.change = {
+        ...createParsedChange(),
+        contains_git_conflicts: true,
+        revisions: {
+          ps2: ps2,
+          edit: createEditRevision(2 as BasePatchSetNum),
+        },
+      };
+    }
+
+    test('activates merge editor and loads all three side panes', async () => {
+      setMergeChange(true);
+      stubRestApi('getFileContent').returns(
+        Promise.resolve({
+          ok: true,
+          type: 'text/plain',
+          content: conflictText,
+        })
+      );
+      const sideStub = stubRestApi('getProjectCommitFileContent');
+      sideStub.callsFake(async (_repo, commit) => {
+        if (commit === ('ours-sha' as CommitId)) {
+          return {ok: true, content: 'ours text\n'};
+        }
+        if (commit === ('theirs-sha' as CommitId)) {
+          return {ok: true, content: 'theirs text\n'};
+        }
+        if (commit === ('base-sha' as CommitId)) {
+          return {ok: true, content: 'base text\n'};
+        }
+        return undefined;
+      });
+
+      await element.getFileData();
+      await element.updateComplete;
+
+      const mergeEditor = query<HTMLElement>(element, 'gr-merge-editor');
+      assert.isOk(mergeEditor);
+      const defaultEditor = query<GrDefaultEditor>(element, 'gr-default-editor');
+      assert.isNotOk(defaultEditor);
+      assert.equal((mergeEditor as any).fileContent, conflictText);
+      assert.equal((mergeEditor as any).currentRef, 'ours text\n');
+      assert.equal((mergeEditor as any).incomingRef, 'theirs text\n');
+      assert.equal((mergeEditor as any).baseRef, 'base text\n');
+      assert.isTrue((mergeEditor as any).showBaseColumn);
+    });
+
+    test('activates merge editor from contains_git_conflicts without markers', async () => {
+      setMergeChange(true);
+      stubRestApi('getFileContent').returns(
+        Promise.resolve({
+          ok: true,
+          type: 'text/plain',
+          content: 'clean file\n',
+        })
+      );
+      stubRestApi('getProjectCommitFileContent').resolves({
+        ok: true,
+        content: 'context text\n',
+      });
+
+      await element.getFileData();
+      await element.updateComplete;
+
+      assert.isOk(query<HTMLElement>(element, 'gr-merge-editor'));
+      assert.isNotOk(query<GrDefaultEditor>(element, 'gr-default-editor'));
+    });
+
+    test('falls back to default editor when no markers and not a two-parent merge', async () => {
+      setMergeChange(false);
+      stubRestApi('getFileContent').returns(
+        Promise.resolve({
+          ok: true,
+          type: 'text/plain',
+          content: 'clean file\n',
+        })
+      );
+
+      await element.getFileData();
+      await element.updateComplete;
+
+      assert.isOk(query<GrDefaultEditor>(element, 'gr-default-editor'));
+      assert.isNotOk(query<HTMLElement>(element, 'gr-merge-editor'));
+    });
+
+    test('degrades gracefully when one side fetch fails and base is missing', async () => {
+      setMergeChange(true);
+      const rev = element.change!.revisions!['ps2'];
+      rev.conflicts = {
+        ours: 'ours-sha' as CommitId,
+        theirs: 'theirs-sha' as CommitId,
+        containsConflicts: true,
+      };
+      stubRestApi('getFileContent').returns(
+        Promise.resolve({
+          ok: true,
+          type: 'text/plain',
+          content: conflictText,
+        })
+      );
+      const sideStub = stubRestApi('getProjectCommitFileContent');
+      sideStub.callsFake(async (_repo, commit) => {
+        if (commit === ('ours-sha' as CommitId)) {
+          return {ok: true, content: 'ours text\n'};
+        }
+        if (commit === ('theirs-sha' as CommitId)) {
+          throw new Error('fetch failed');
+        }
+        return undefined;
+      });
+
+      await element.getFileData();
+      await element.updateComplete;
+
+      const mergeEditor = query<HTMLElement>(element, 'gr-merge-editor');
+      assert.isOk(mergeEditor);
+      assert.equal((mergeEditor as any).currentRef, 'ours text\n');
+      assert.equal((mergeEditor as any).incomingRef, '');
+      assert.equal((mergeEditor as any).baseRef, '');
+      assert.isFalse((mergeEditor as any).showBaseColumn);
     });
   });
 
