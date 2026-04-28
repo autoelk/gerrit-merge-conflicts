@@ -36,7 +36,7 @@ js-to-ts.sh
 /polygerrit-ui/app/node_modules/
 /package-lock.json
 /plugins/*
-/polygerrit-ui/coverage/
+# /polygerrit-ui/coverage/
 /polygerrit-ui/app/plugins/*
 /polygerrit-ui/screenshots/Chrome/failed/
 /polygerrit-ui/screenshots/Chromium/failed/
