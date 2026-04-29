@@ -704,7 +704,7 @@ suite('gr-merge-editor tests', () => {
       element.incomingRef = 'incoming';
       await element.updateComplete;
       const panes = Array.from(
-        element.shadowRoot!.querySelectorAll<HTMLTextAreaElement>('textarea.merge-pane')
+        element.shadowRoot!.querySelectorAll<HTMLElement>('.merge-pane')
       );
       assert.isAbove(panes.length, 1);
       // Verify the scroll handler is wired — it should not throw when dispatched

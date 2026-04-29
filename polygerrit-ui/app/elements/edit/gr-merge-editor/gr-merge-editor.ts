@@ -4,28 +4,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import '../../shared/gr-button/gr-button';
-import { sharedStyles } from '../../../styles/shared-styles';
-import { css, html, LitElement, PropertyValues } from 'lit';
-import { customElement, property, query, state } from 'lit/decorators.js';
-import { fire } from '../../../utils/event-util';
-import { Modifier } from '../../../utils/dom-util';
-import { ShortcutController } from '../../lit/shortcut-controller';
+import {sharedStyles} from '../../../styles/shared-styles';
+import {css, html, LitElement, PropertyValues} from 'lit';
+import {customElement, property, query, state} from 'lit/decorators.js';
+import {fire} from '../../../utils/event-util';
+import {Modifier} from '../../../utils/dom-util';
+import {ShortcutController} from '../../lit/shortcut-controller';
 import {
   applyBothChoice,
   applyConflictChoice,
+  ConflictRegion,
   parseConflictRegions,
 } from '../../../utils/merge-conflict-parser';
 
 const UNDO_STACK_LIMIT = 10;
 
 const SHORTCUTS = [
-  { key: 'Alt+C', desc: 'Accept Current' },
-  { key: 'Alt+I', desc: 'Accept Incoming' },
-  { key: 'Alt+B', desc: 'Accept Both (Current first)' },
-  { key: 'Alt+N', desc: 'Next conflict' },
-  { key: 'Alt+P', desc: 'Previous conflict' },
-  { key: 'Alt+U', desc: 'Undo last resolution' },
+  {key: 'Alt+C', desc: 'Accept Current'},
+  {key: 'Alt+I', desc: 'Accept Incoming'},
+  {key: 'Alt+B', desc: 'Accept Both (Current first)'},
+  {key: 'Alt+N', desc: 'Next conflict'},
+  {key: 'Alt+P', desc: 'Previous conflict'},
+  {key: 'Alt+U', desc: 'Undo last resolution'},
 ] as const;
+
+interface HighlightRange {
+  startLine: number;
+  endLine: number;
+  kind: 'ours' | 'theirs' | 'marker' | 'unresolved';
+  isActive: boolean;
+}
 
 @customElement('gr-merge-editor')
 export class GrMergeEditor extends LitElement {
@@ -35,22 +43,22 @@ export class GrMergeEditor extends LitElement {
    * @event content-change
    */
 
-  @property({ type: String })
+  @property({type: String})
   fileContent = '';
 
   /** Parent 1 ("Current") file text for context */
-  @property({ type: String })
+  @property({type: String})
   currentRef = '';
 
   /** Parent 2 ("Incoming") file text for context */
-  @property({ type: String })
+  @property({type: String})
   incomingRef = '';
 
   /** Optional merge base column */
-  @property({ type: String })
+  @property({type: String})
   baseRef = '';
 
-  @property({ type: Boolean })
+  @property({type: Boolean})
   showBaseColumn = false;
 
   @query('#panes')
@@ -58,6 +66,9 @@ export class GrMergeEditor extends LitElement {
 
   @query('#result')
   private resultTextarea?: HTMLTextAreaElement;
+
+  @query('.overlay-pre')
+  private overlayPre?: HTMLElement;
 
   @state()
   private activeConflictIndex = 0;
@@ -85,32 +96,32 @@ export class GrMergeEditor extends LitElement {
    */
   private _internalUpdate = false;
 
-  private syncScrollSource?: HTMLTextAreaElement;
+  private syncScrollSource?: HTMLElement;
 
   private readonly shortcuts = new ShortcutController(this);
 
   constructor() {
     super();
     this.shortcuts.addLocal(
-      { key: 'c', modifiers: [Modifier.ALT_KEY] },
+      {key: 'c', modifiers: [Modifier.ALT_KEY]},
       () => this.applyChoice('current')
     );
     this.shortcuts.addLocal(
-      { key: 'i', modifiers: [Modifier.ALT_KEY] },
+      {key: 'i', modifiers: [Modifier.ALT_KEY]},
       () => this.applyChoice('incoming')
     );
     this.shortcuts.addLocal(
-      { key: 'b', modifiers: [Modifier.ALT_KEY] },
+      {key: 'b', modifiers: [Modifier.ALT_KEY]},
       () => this.applyBoth('current-first')
     );
-    this.shortcuts.addLocal({ key: 'n', modifiers: [Modifier.ALT_KEY] }, () =>
+    this.shortcuts.addLocal({key: 'n', modifiers: [Modifier.ALT_KEY]}, () =>
       this.onNext()
     );
-    this.shortcuts.addLocal({ key: 'p', modifiers: [Modifier.ALT_KEY] }, () =>
+    this.shortcuts.addLocal({key: 'p', modifiers: [Modifier.ALT_KEY]}, () =>
       this.onPrevious()
     );
     this.shortcuts.addLocal(
-      { key: 'u', modifiers: [Modifier.ALT_KEY] },
+      {key: 'u', modifiers: [Modifier.ALT_KEY]},
       () => this.undo()
     );
   }
@@ -188,6 +199,7 @@ export class GrMergeEditor extends LitElement {
           line-height: calc(var(--font-size-code) + var(--spacing-s));
           min-height: 50vh;
           overflow: auto;
+          padding: 2px;
           resize: vertical;
           white-space: pre;
           width: 100%;
@@ -195,11 +207,116 @@ export class GrMergeEditor extends LitElement {
         textarea:focus {
           outline: none;
         }
-        textarea[readonly] {
-          background-color: var(--table-header-background);
-        }
         #panes.wrap textarea {
           white-space: pre-wrap;
+        }
+        /* Read-only pane renderer (replaces textarea[readonly]) */
+        .pane-content {
+          background-color: var(--table-header-background);
+          border: 1px solid var(--border-color);
+          box-sizing: border-box;
+          flex: 1;
+          min-height: 50vh;
+          overflow: auto;
+          resize: vertical;
+          width: 100%;
+        }
+        .pane-pre {
+          box-sizing: border-box;
+          color: var(--primary-text-color);
+          font-family: var(--monospace-font-family);
+          font-size: var(--font-size-code);
+          line-height: calc(var(--font-size-code) + var(--spacing-s));
+          margin: 0;
+          min-width: max-content;
+          padding: 2px;
+          white-space: pre;
+        }
+        #panes.wrap .pane-pre {
+          min-width: unset;
+          white-space: pre-wrap;
+        }
+        /* Result pane overlay */
+        .result-wrapper {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          min-height: 50vh;
+          position: relative;
+        }
+        .result-wrapper > textarea {
+          background: transparent;
+          flex: 1;
+          min-height: unset;
+          position: relative;
+          z-index: 1;
+        }
+        .highlight-overlay {
+          inset: 1px;
+          overflow: hidden;
+          pointer-events: none;
+          position: absolute;
+          z-index: 0;
+        }
+        .overlay-pre {
+          box-sizing: border-box;
+          color: transparent;
+          font-family: var(--monospace-font-family);
+          font-size: var(--font-size-code);
+          line-height: calc(var(--font-size-code) + var(--spacing-s));
+          margin: 0;
+          min-width: max-content;
+          padding: 2px;
+          pointer-events: none;
+          user-select: none;
+          white-space: pre;
+        }
+        #panes.wrap .overlay-pre {
+          min-width: unset;
+          white-space: pre-wrap;
+        }
+        /* Line highlight classes */
+        .line {
+          border-left: 4px solid transparent;
+          display: block;
+        }
+        .line.conflict-ours.active {
+          background-color: var(--info-background, #e8f0fe);
+          border-left-color: var(--info-foreground, #1a73e8);
+        }
+        .line.conflict-ours.inactive {
+          background-color: var(--info-background, #e8f0fe);
+          border-left-color: var(--info-foreground, #1a73e8);
+          opacity: 0.3;
+        }
+        .line.conflict-theirs.active {
+          background-color: var(--success-background, #e6f4ea);
+          border-left-color: var(--success-foreground, #188038);
+        }
+        .line.conflict-theirs.inactive {
+          background-color: var(--success-background, #e6f4ea);
+          border-left-color: var(--success-foreground, #188038);
+          opacity: 0.3;
+        }
+        .line.conflict-unresolved.active {
+          background-color: var(--warning-background, #fef7e0);
+          border-left-color: var(--warning-foreground, #e37400);
+        }
+        .line.conflict-unresolved.inactive {
+          background-color: var(--warning-background, #fef7e0);
+          border-left-color: var(--warning-foreground, #e37400);
+          opacity: 0.3;
+        }
+        .line.conflict-marker.active {
+          background-color: var(--warning-background, #fef7e0);
+          border-left-color: var(--warning-foreground, #e37400);
+          font-weight: bold;
+        }
+        .line.conflict-marker.inactive {
+          background-color: var(--warning-background, #fef7e0);
+          border-left-color: var(--warning-foreground, #e37400);
+          font-weight: bold;
+          opacity: 0.3;
         }
         .toolbar {
           align-items: center;
@@ -309,8 +426,14 @@ export class GrMergeEditor extends LitElement {
     }
   }
 
+  override updated(_changedProperties: PropertyValues) {
+    this.updateOverlayTransform();
+  }
+
   override render() {
     const conflicts = parseConflictRegions(this.fileContent);
+    const {currentRanges, incomingRanges, resultRanges} =
+      this.computeHighlightRanges(conflicts);
     const conflictNum = conflicts.length ? this.activeConflictIndex + 1 : 0;
     const hasConflict = conflicts.length > 0;
     const paneClasses = [
@@ -348,36 +471,35 @@ export class GrMergeEditor extends LitElement {
               Current
               <span class="hint">This patch set's first parent</span>
             </header>
-            <textarea
-              class="merge-pane"
-              readonly
-              .value=${this.currentRef}
-              @scroll=${this.handleScroll}
-            ></textarea>
+            <div class="pane-content merge-pane" @scroll=${this.handleScroll}>
+              <pre class="pane-pre">${this.renderLines(this.currentRef, currentRanges)}</pre>
+            </div>
           </div>
           <div class="column incoming">
             <header>
               Incoming
               <span class="hint">This patch set's second parent</span>
             </header>
-            <textarea
-              class="merge-pane"
-              readonly
-              .value=${this.incomingRef}
-              @scroll=${this.handleScroll}
-            ></textarea>
+            <div class="pane-content merge-pane" @scroll=${this.handleScroll}>
+              <pre class="pane-pre">${this.renderLines(this.incomingRef, incomingRanges)}</pre>
+            </div>
           </div>
         </div>
         <div class="bottom-row">
           <div class="column result">
             <header>Result <span class="hint">Your edit (saved)</span></header>
-            <textarea
-              id="result"
-              class="merge-pane"
-              .value=${this.fileContent}
-              @input=${this.handleResultInput}
-              @scroll=${this.handleScroll}
-            ></textarea>
+            <div class="result-wrapper">
+              <div class="highlight-overlay" aria-hidden="true">
+                <pre class="overlay-pre">${this.renderLines(this.fileContent, resultRanges)}</pre>
+              </div>
+              <textarea
+                id="result"
+                class="merge-pane"
+                .value=${this.fileContent}
+                @input=${this.handleResultInput}
+                @scroll=${this.handleScroll}
+              ></textarea>
+            </div>
           </div>
         </div>
       </div>
@@ -462,13 +584,13 @@ export class GrMergeEditor extends LitElement {
           link=""
           @click=${this.toggleWordWrap}
           title="Toggle word wrap"
-          >Word Wrap${this.wordWrap ? ' \u2713' : ''}</gr-button
+          >Word Wrap${this.wordWrap ? ' ✓' : ''}</gr-button
         >
         <details class="shortcut-legend">
-          <summary>\u2328 Shortcuts</summary>
+          <summary>⌨ Shortcuts</summary>
           <table>
             ${SHORTCUTS.map(
-        ({ key, desc }) => html`
+        ({key, desc}) => html`
                 <tr>
                   <td>${key}</td>
                   <td>${desc}</td>
@@ -482,23 +604,30 @@ export class GrMergeEditor extends LitElement {
   }
 
   private handleScroll = (e: Event) => {
-    const src = e.target as HTMLTextAreaElement;
+    const src = e.target as HTMLElement;
     if (this.syncScrollSource === src) return;
     this.syncScrollSource = src;
     const top = src.scrollTop;
-    this.panes?.querySelectorAll('textarea.merge-pane').forEach(el => {
-      const ta = el as HTMLTextAreaElement;
-      if (ta !== src) ta.scrollTop = top;
+    this.panes?.querySelectorAll('.merge-pane').forEach(el => {
+      if (el !== src) (el as HTMLElement).scrollTop = top;
     });
+    this.updateOverlayTransform();
     requestAnimationFrame(() => {
       this.syncScrollSource = undefined;
     });
   };
 
+  private updateOverlayTransform() {
+    const ta = this.resultTextarea;
+    const pre = this.overlayPre;
+    if (!ta || !pre) return;
+    pre.style.transform = `translateY(-${ta.scrollTop}px)`;
+  }
+
   private handleResultInput(e: Event) {
     const value = (e.target as HTMLTextAreaElement).value;
     this.fileContent = value;
-    fire(this, 'content-change', { value });
+    fire(this, 'content-change', {value});
   }
 
   private onAcceptCurrent = () => {
@@ -545,7 +674,7 @@ export class GrMergeEditor extends LitElement {
     this._internalUpdate = true;
     const merged = applyConflictChoice(this.fileContent, cur, side);
     this.fileContent = merged;
-    fire(this, 'content-change', { value: merged });
+    fire(this, 'content-change', {value: merged});
     const nextConflicts = parseConflictRegions(merged);
     if (nextConflicts.length === 0) {
       this.activeConflictIndex = 0;
@@ -565,7 +694,7 @@ export class GrMergeEditor extends LitElement {
       text = applyConflictChoice(text, conflicts[i], side);
     }
     this.fileContent = text;
-    fire(this, 'content-change', { value: text });
+    fire(this, 'content-change', {value: text});
     this.activeConflictIndex = 0;
   }
 
@@ -578,7 +707,7 @@ export class GrMergeEditor extends LitElement {
     this._internalUpdate = true;
     const merged = applyBothChoice(this.fileContent, cur, order);
     this.fileContent = merged;
-    fire(this, 'content-change', { value: merged });
+    fire(this, 'content-change', {value: merged});
     const nextConflicts = parseConflictRegions(merged);
     if (nextConflicts.length === 0) {
       this.activeConflictIndex = 0;
@@ -593,7 +722,7 @@ export class GrMergeEditor extends LitElement {
     if (prev === undefined) return;
     this._internalUpdate = true;
     this.fileContent = prev;
-    fire(this, 'content-change', { value: prev });
+    fire(this, 'content-change', {value: prev});
     // undoStack mutation isn't reactive — request re-render so the button
     // disabled state reflects the new (smaller) stack.
     this.requestUpdate();
@@ -623,10 +752,102 @@ export class GrMergeEditor extends LitElement {
     const targetTop = linesBefore * lineHeightPx;
     const center = targetTop - ta.clientHeight / 2;
     ta.scrollTop = Math.max(0, center);
-    // sync other panes
-    this.panes?.querySelectorAll('textarea.merge-pane').forEach(el => {
-      const t = el as HTMLTextAreaElement;
-      if (t !== ta) t.scrollTop = ta.scrollTop;
+    this.panes?.querySelectorAll('.merge-pane').forEach(el => {
+      if (el !== ta) (el as HTMLElement).scrollTop = ta.scrollTop;
+    });
+    this.updateOverlayTransform();
+  }
+
+  private charOffsetToLine(text: string, offset: number): number {
+    return (text.slice(0, offset).match(/\n/g) ?? []).length;
+  }
+
+  private computeHighlightRanges(conflicts: ConflictRegion[]): {
+    currentRanges: HighlightRange[];
+    incomingRanges: HighlightRange[];
+    resultRanges: HighlightRange[];
+  } {
+    const currentRanges: HighlightRange[] = [];
+    const incomingRanges: HighlightRange[] = [];
+    const resultRanges: HighlightRange[] = [];
+
+    for (let i = 0; i < conflicts.length; i++) {
+      const region = conflicts[i];
+      const isActive = i === this.activeConflictIndex;
+
+      // Result pane: classify each line in the conflict region
+      const regionText = this.fileContent.slice(region.start, region.end);
+      const regionStartLine = this.charOffsetToLine(
+        this.fileContent,
+        region.start
+      );
+      const regionLines = regionText.split('\n');
+      for (let j = 0; j < regionLines.length; j++) {
+        const lineText = regionLines[j];
+        // Skip trailing empty string produced by split when region ends with \n
+        if (lineText === '' && j === regionLines.length - 1) continue;
+        const isMarker = /^(<{7}|={7}|>{7}|\|{7})/.test(lineText);
+        resultRanges.push({
+          startLine: regionStartLine + j,
+          endLine: regionStartLine + j,
+          kind: isMarker ? 'marker' : 'unresolved',
+          isActive,
+        });
+      }
+
+      // Current pane: locate ours content in currentRef
+      if (region.ours) {
+        const idx = this.currentRef.indexOf(region.ours);
+        if (idx !== -1) {
+          const startLine = this.charOffsetToLine(this.currentRef, idx);
+          const oursEnd =
+            idx +
+            region.ours.length -
+            (region.ours.endsWith('\n') ? 1 : 0);
+          const endLine = this.charOffsetToLine(
+            this.currentRef,
+            Math.max(idx, oursEnd)
+          );
+          currentRanges.push({startLine, endLine, kind: 'ours', isActive});
+        }
+      }
+
+      // Incoming pane: locate theirs content in incomingRef
+      if (region.theirs) {
+        const idx = this.incomingRef.indexOf(region.theirs);
+        if (idx !== -1) {
+          const startLine = this.charOffsetToLine(this.incomingRef, idx);
+          const theirsEnd =
+            idx +
+            region.theirs.length -
+            (region.theirs.endsWith('\n') ? 1 : 0);
+          const endLine = this.charOffsetToLine(
+            this.incomingRef,
+            Math.max(idx, theirsEnd)
+          );
+          incomingRanges.push({startLine, endLine, kind: 'theirs', isActive});
+        }
+      }
+    }
+
+    return {currentRanges, incomingRanges, resultRanges};
+  }
+
+  private renderLines(text: string, ranges: HighlightRange[]) {
+    const lines = text.split('\n');
+    const lineMap = new Map<number, HighlightRange>();
+    for (const range of ranges) {
+      for (let l = range.startLine; l <= range.endLine; l++) {
+        lineMap.set(l, range);
+      }
+    }
+    return lines.map((lineText, i) => {
+      const range = lineMap.get(i);
+      if (!range) {
+        return html`<span class="line">${lineText}</span>`;
+      }
+      const cls = `line conflict-${range.kind} ${range.isActive ? 'active' : 'inactive'}`;
+      return html`<span class=${cls}>${lineText}</span>`;
     });
   }
 }
