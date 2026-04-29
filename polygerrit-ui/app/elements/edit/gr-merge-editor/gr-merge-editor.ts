@@ -245,18 +245,16 @@ export class GrMergeEditor extends LitElement {
           position: relative;
         }
         .result-wrapper > textarea {
-          background: transparent;
           flex: 1;
           min-height: unset;
-          position: relative;
-          z-index: 1;
         }
+        /* Overlay sits on top of textarea; pointer-events:none passes clicks through */
         .highlight-overlay {
           inset: 1px;
           overflow: hidden;
           pointer-events: none;
           position: absolute;
-          z-index: 0;
+          z-index: 2;
         }
         .overlay-pre {
           box-sizing: border-box;
@@ -275,48 +273,46 @@ export class GrMergeEditor extends LitElement {
           min-width: unset;
           white-space: pre-wrap;
         }
-        /* Line highlight classes */
+        /* Base line style — block so background fills full width */
         .line {
           border-left: 4px solid transparent;
           display: block;
         }
-        .line.conflict-ours.active {
+        /* Read-only panes: solid theme colors */
+        .pane-pre .line.conflict-ours.active {
           background-color: var(--info-background, #e8f0fe);
           border-left-color: var(--info-foreground, #1a73e8);
         }
-        .line.conflict-ours.inactive {
+        .pane-pre .line.conflict-ours.inactive {
           background-color: var(--info-background, #e8f0fe);
           border-left-color: var(--info-foreground, #1a73e8);
           opacity: 0.3;
         }
-        .line.conflict-theirs.active {
+        .pane-pre .line.conflict-theirs.active {
           background-color: var(--success-background, #e6f4ea);
           border-left-color: var(--success-foreground, #188038);
         }
-        .line.conflict-theirs.inactive {
+        .pane-pre .line.conflict-theirs.inactive {
           background-color: var(--success-background, #e6f4ea);
           border-left-color: var(--success-foreground, #188038);
           opacity: 0.3;
         }
-        .line.conflict-unresolved.active {
-          background-color: var(--warning-background, #fef7e0);
+        /* Result pane overlay: semi-transparent rgba so textarea text shows through */
+        .overlay-pre .line.conflict-unresolved.active {
+          background-color: rgba(227, 116, 0, 0.18);
           border-left-color: var(--warning-foreground, #e37400);
         }
-        .line.conflict-unresolved.inactive {
-          background-color: var(--warning-background, #fef7e0);
-          border-left-color: var(--warning-foreground, #e37400);
-          opacity: 0.3;
+        .overlay-pre .line.conflict-unresolved.inactive {
+          background-color: rgba(227, 116, 0, 0.07);
+          border-left-color: rgba(227, 116, 0, 0.3);
         }
-        .line.conflict-marker.active {
-          background-color: var(--warning-background, #fef7e0);
+        .overlay-pre .line.conflict-marker.active {
+          background-color: rgba(227, 116, 0, 0.28);
           border-left-color: var(--warning-foreground, #e37400);
-          font-weight: bold;
         }
-        .line.conflict-marker.inactive {
-          background-color: var(--warning-background, #fef7e0);
-          border-left-color: var(--warning-foreground, #e37400);
-          font-weight: bold;
-          opacity: 0.3;
+        .overlay-pre .line.conflict-marker.inactive {
+          background-color: rgba(227, 116, 0, 0.10);
+          border-left-color: rgba(227, 116, 0, 0.3);
         }
         .toolbar {
           align-items: center;
