@@ -8,8 +8,9 @@ import '../../../test/common-test-setup';
 import './gr-merge-editor';
 import { GrMergeEditor } from './gr-merge-editor';
 import { assert, fixture, html } from '@open-wc/testing';
-import { query, queryAll } from '../../../test/test-utils';
+import { pressKey, query, queryAll } from '../../../test/test-utils';
 import { GrButton } from '../../shared/gr-button/gr-button';
+import { Modifier } from '../../../utils/dom-util';
 
 const TWO_WAY_A = [
   '<<<<<<< HEAD',
@@ -451,6 +452,17 @@ suite('gr-merge-editor tests', () => {
       await element.updateComplete;
       assert.equal(element.fileContent, 'ours diff3\ntheirs diff3\n');
     });
+
+    test('does nothing when no conflicts are present', async () => {
+      const spy = sinon.spy();
+      element.fileContent = 'clean file\n';
+      await element.updateComplete;
+      element.addEventListener('content-change', spy);
+      element.applyBoth('current-first');
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'clean file\n');
+      assert.isFalse(spy.called);
+    });
   });
 
   suite('word-wrap toggle', () => {
@@ -694,6 +706,49 @@ suite('gr-merge-editor tests', () => {
       assert.isTrue(
         btn(element, 'Undo last conflict').hasAttribute('disabled')
       );
+    });
+  });
+
+  suite('keyboard shortcuts', () => {
+    setup(async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+    });
+
+    test('Alt+N and Alt+P navigate between conflicts', async () => {
+      pressKey(element, 'n', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.include(
+        element.shadowRoot!.querySelector('.conflict-badge')!.textContent,
+        '2 / 2'
+      );
+
+      pressKey(element, 'p', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.include(
+        element.shadowRoot!.querySelector('.conflict-badge')!.textContent,
+        '1 / 2'
+      );
+    });
+
+    test('Alt+C, Alt+I, Alt+B and Alt+U resolve and undo conflicts', async () => {
+      pressKey(element, 'c', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.include(element.fileContent, 'ours A\n');
+
+      pressKey(element, 'i', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours A\nmiddle\ntheirs B\n');
+
+      pressKey(element, 'u', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.include(element.fileContent, TWO_WAY_B);
+
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+      pressKey(element, 'b', Modifier.ALT_KEY);
+      await element.updateComplete;
+      assert.equal(element.fileContent, 'ours A\ntheirs A\n');
     });
   });
 

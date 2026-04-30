@@ -98,6 +98,18 @@ suite('merge-conflict-parser tests', () => {
       const malformed = '<<<<<<< HEAD\nours\n=======\ntheirs\n';
       assert.deepEqual(parseConflictRegions(malformed), []);
     });
+
+    test('skips malformed diff3 block missing ======= separator', () => {
+      const malformed = [
+        '<<<<<<< HEAD',
+        'ours',
+        '||||||| base',
+        'base',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      assert.deepEqual(parseConflictRegions(malformed), []);
+    });
   });
 
   suite('parseConflictRegions — complex scenarios', () => {
@@ -220,6 +232,44 @@ suite('merge-conflict-parser tests', () => {
       ].join('\n');
       const regions = parseConflictRegions(text);
       // The parser jumps to the inner <<<<<<< and parses from there
+      assert.equal(regions.length, 1);
+      assert.equal(regions[0].ours, 'ours clean\n');
+      assert.equal(regions[0].theirs, 'theirs clean\n');
+    });
+
+    test('recovers after nested <<<<<< opener inside diff3 base block', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'ours outer',
+        '||||||| base',
+        'base before nested',
+        '<<<<<<< HEAD',
+        'ours clean',
+        '=======',
+        'theirs clean',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const regions = parseConflictRegions(text);
+      assert.equal(regions.length, 1);
+      assert.equal(regions[0].ours, 'ours clean\n');
+      assert.equal(regions[0].theirs, 'theirs clean\n');
+    });
+
+    test('recovers after nested <<<<<< opener inside theirs block', () => {
+      const text = [
+        '<<<<<<< HEAD',
+        'ours outer',
+        '=======',
+        'theirs before nested',
+        '<<<<<<< HEAD',
+        'ours clean',
+        '=======',
+        'theirs clean',
+        '>>>>>>> branch',
+        '',
+      ].join('\n');
+      const regions = parseConflictRegions(text);
       assert.equal(regions.length, 1);
       assert.equal(regions[0].ours, 'ours clean\n');
       assert.equal(regions[0].theirs, 'theirs clean\n');
