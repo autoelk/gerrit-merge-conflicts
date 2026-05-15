@@ -2391,14 +2391,24 @@ export class GrRestApiServiceImpl implements RestApiService, Finalizable {
   getFileContent(
     changeNum: NumericChangeId,
     path: string,
-    patchNum: PatchSetNum
+    patchNum: PatchSetNum,
+    parent?: number
   ): Promise<Response | Base64FileContent | undefined> {
     // 404s indicate the file does not exist yet in the revision, so suppress
-    // them.
+    // them. ?parent=N must not use reportServerError: errFn (suppress404s)
+    // still opens the global dialog for non-404 (e.g. 400 invalid parent).
+    const reportServerError = typeof parent !== 'number';
     const promise =
       patchNum === EDIT
         ? this._getFileInChangeEdit(changeNum, path)
-        : this._getFileInRevision(changeNum, path, patchNum, suppress404s);
+        : this._getFileInRevision(
+            changeNum,
+            path,
+            patchNum,
+            suppress404s,
+            parent,
+            reportServerError
+          );
 
     return promise.then(res => {
       // A 204 is returned if the file is empty so we have
@@ -2417,6 +2427,28 @@ export class GrRestApiServiceImpl implements RestApiService, Finalizable {
     });
   }
 
+  getProjectCommitFileContent(
+    repo: RepoName,
+    commit: CommitId,
+    path: string
+  ): Promise<Response | Base64FileContent | undefined> {
+    return this._getProjectCommitFileRaw(
+      repo,
+      commit,
+      path,
+      suppress404s
+    ).then(res => {
+      if (!res.ok || res.status === 204) {
+        return res;
+      }
+      const type = res.headers.get('X-FYI-Content-Type');
+      return readJSONResponsePayload(res).then(content => {
+        const strContent = content.parsed as unknown as string | null;
+        return {content: strContent, type, ok: true};
+      });
+    });
+  }
+
   /**
    * Gets a file in a specific change and revision.
    */
@@ -2424,16 +2456,45 @@ export class GrRestApiServiceImpl implements RestApiService, Finalizable {
     changeNum: NumericChangeId,
     path: string,
     patchNum: PatchSetNum,
-    errFn?: ErrorCallback
+    errFn?: ErrorCallback,
+    parent?: number,
+    reportServerError = true
   ): Promise<Response> {
     const url = await this._changeBaseURL(changeNum, patchNum);
+    const parentQuery =
+      typeof parent === 'number' ? `?parent=${parent}` : '';
     return this._restApiHelper.fetch({
       fetchOptions: getFetchOptions({
         headers: {Accept: 'application/json'},
       }),
-      url: `${url}/files/${encodeURIComponent(path)}/content`,
+      url: `${url}/files/${encodeURIComponent(path)}/content${parentQuery}`,
       errFn,
       anonymizedUrl: `${ANONYMIZED_REVISION_BASE_URL}/files/*/content`,
+      reportServerError,
+    });
+  }
+
+  async _getProjectCommitFileRaw(
+    repo: RepoName,
+    commit: CommitId,
+    path: string,
+    errFn?: ErrorCallback
+  ): Promise<Response> {
+    const url =
+      '/projects/' +
+      encodeURIComponent(repo) +
+      '/commits/' +
+      encodeURIComponent(commit) +
+      '/files/' +
+      encodeURIComponent(path) +
+      '/content';
+    return this._restApiHelper.fetch({
+      fetchOptions: getFetchOptions({
+        headers: {Accept: 'application/json'},
+      }),
+      url,
+      errFn,
+      anonymizedUrl: '/projects/*/commits/*/files/*/content',
       reportServerError: true,
     });
   }
