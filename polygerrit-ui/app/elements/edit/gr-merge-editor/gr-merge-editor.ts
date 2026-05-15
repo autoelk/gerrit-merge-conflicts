@@ -8,8 +8,9 @@ import {sharedStyles} from '../../../styles/shared-styles';
 import {css, html, LitElement, PropertyValues} from 'lit';
 import {customElement, property, query, state} from 'lit/decorators.js';
 import {fire} from '../../../utils/event-util';
-import {Modifier} from '../../../utils/dom-util';
-import {ShortcutController} from '../../lit/shortcut-controller';
+import {modifierPressed} from '../../../utils/dom-util';
+import {resolve} from '../../../models/dependency';
+import {shortcutsServiceToken} from '../../../services/shortcuts/shortcuts-service';
 import {
   applyBothChoice,
   applyConflictChoice,
@@ -20,12 +21,12 @@ import {
 const UNDO_STACK_LIMIT = 10;
 
 const SHORTCUTS = [
-  {key: 'Alt+C', desc: 'Accept Current'},
-  {key: 'Alt+I', desc: 'Accept Incoming'},
-  {key: 'Alt+B', desc: 'Accept Both (Current first)'},
-  {key: 'Alt+N', desc: 'Next conflict'},
-  {key: 'Alt+P', desc: 'Previous conflict'},
-  {key: 'Alt+U', desc: 'Undo last resolution'},
+  {key: 'c', desc: 'Accept Current'},
+  {key: 'i', desc: 'Accept Incoming'},
+  {key: 'b', desc: 'Accept Both (Current first)'},
+  {key: 'n', desc: 'Next conflict'},
+  {key: 'p', desc: 'Previous conflict'},
+  {key: 'u', desc: 'Undo last resolution'},
 ] as const;
 
 interface HighlightRange {
@@ -98,32 +99,71 @@ export class GrMergeEditor extends LitElement {
 
   private syncScrollSource?: HTMLElement;
 
-  private readonly shortcuts = new ShortcutController(this);
+  private readonly getShortcutsService = resolve(this, shortcutsServiceToken);
 
-  constructor() {
-    super();
-    this.shortcuts.addLocal(
-      {key: 'c', modifiers: [Modifier.ALT_KEY]},
-      () => this.applyChoice('current')
-    );
-    this.shortcuts.addLocal(
-      {key: 'i', modifiers: [Modifier.ALT_KEY]},
-      () => this.applyChoice('incoming')
-    );
-    this.shortcuts.addLocal(
-      {key: 'b', modifiers: [Modifier.ALT_KEY]},
-      () => this.applyBoth('current-first')
-    );
-    this.shortcuts.addLocal({key: 'n', modifiers: [Modifier.ALT_KEY]}, () =>
-      this.onNext()
-    );
-    this.shortcuts.addLocal({key: 'p', modifiers: [Modifier.ALT_KEY]}, () =>
-      this.onPrevious()
-    );
-    this.shortcuts.addLocal(
-      {key: 'u', modifiers: [Modifier.ALT_KEY]},
-      () => this.undo()
-    );
+  override connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('keydown', this.onDocumentKeydown, true);
+  }
+
+  override disconnectedCallback() {
+    document.removeEventListener('keydown', this.onDocumentKeydown, true);
+    super.disconnectedCallback();
+  }
+
+  /**
+   * Letter shortcuts (c/i/b/n/p/u) while the merge UI is open. Capture on
+   * document so keys work when focus is on the toolbar; skip when the result
+   * textarea is the event target so the user can type there.
+   */
+  private onDocumentKeydown = (e: KeyboardEvent) => {
+    if (!this.isConnected) return;
+    const shortcuts = this.getShortcutsService();
+    if (shortcuts.shortcutsDisabled || shortcuts.isInComboKeyMode()) return;
+    if (modifierPressed(e) || e.repeat) return;
+    if (!this.shouldHandleMergeShortcut(e)) return;
+
+    let handled = false;
+    switch (e.key) {
+      case 'c':
+        handled = true;
+        this.applyChoice('current');
+        break;
+      case 'i':
+        handled = true;
+        this.applyChoice('incoming');
+        break;
+      case 'b':
+        handled = true;
+        this.applyBoth('current-first');
+        break;
+      case 'n':
+        handled = true;
+        this.onNext();
+        break;
+      case 'p':
+        handled = true;
+        this.onPrevious();
+        break;
+      case 'u':
+        handled = true;
+        this.undo();
+        break;
+      default:
+        return;
+    }
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    }
+  };
+
+  /** True when the result pane should receive the key (not a merge shortcut). */
+  private shouldHandleMergeShortcut(e: KeyboardEvent): boolean {
+    const result = this.resultTextarea;
+    if (!result) return false;
+    return !e.composedPath().includes(result);
   }
 
   static override get styles() {
@@ -516,21 +556,21 @@ export class GrMergeEditor extends LitElement {
           ?disabled=${!hasConflict}
           link=""
           @click=${this.onAcceptCurrent}
-          title="Keep the Current (first parent) side for this conflict (Alt+C)"
+          title="Keep the Current (first parent) side for this conflict (c)"
           >Accept Current</gr-button
         >
         <gr-button
           ?disabled=${!hasConflict}
           link=""
           @click=${this.onAcceptIncoming}
-          title="Keep the Incoming (second parent) side for this conflict (Alt+I)"
+          title="Keep the Incoming (second parent) side for this conflict (i)"
           >Accept Incoming</gr-button
         >
         <gr-button
           ?disabled=${!hasConflict}
           link=""
           @click=${this.onAcceptBothCurrentFirst}
-          title="Accept both sides: Current first, then Incoming (Alt+B)"
+          title="Accept both sides: Current first, then Incoming (b)"
           >Accept Both</gr-button
         >
         <gr-button
@@ -558,7 +598,7 @@ export class GrMergeEditor extends LitElement {
           ?disabled=${!hasConflict || this.activeConflictIndex <= 0}
           link=""
           @click=${this.onPrevious}
-          title="Previous conflict (Alt+P)"
+          title="Previous conflict (p)"
           >Previous conflict</gr-button
         >
         <gr-button
@@ -566,14 +606,14 @@ export class GrMergeEditor extends LitElement {
       this.activeConflictIndex >= conflicts.length - 1}
           link=""
           @click=${this.onNext}
-          title="Next conflict (Alt+N)"
+          title="Next conflict (n)"
           >Next conflict</gr-button
         >
         <gr-button
           ?disabled=${this.undoStack.length === 0}
           link=""
           @click=${this.undo}
-          title="Undo last conflict resolution (Alt+U)"
+          title="Undo last conflict resolution (u)"
           >Undo</gr-button
         >
         <gr-button

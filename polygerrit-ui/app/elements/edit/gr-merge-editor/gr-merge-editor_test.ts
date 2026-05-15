@@ -561,6 +561,56 @@ suite('gr-merge-editor tests', () => {
     });
   });
 
+  suite('keyboard shortcuts', () => {
+    function keydownOn(
+      target: EventTarget,
+      key: string,
+      init: KeyboardEventInit = {}
+    ) {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          ...init,
+        })
+      );
+    }
+
+    setup(async () => {
+      element.fileContent = TWO_WAY_A;
+      await element.updateComplete;
+    });
+
+    test('c accepts current when focus is outside result', async () => {
+      keydownOn(document, 'c');
+      await element.updateComplete;
+      assert.include(element.fileContent, 'ours A');
+      assert.notInclude(element.fileContent, '<<<<<<<');
+    });
+
+    test('c does not accept current when result textarea is focused', async () => {
+      const result = element.shadowRoot!.querySelector(
+        '#result'
+      ) as HTMLTextAreaElement;
+      keydownOn(result, 'c');
+      await element.updateComplete;
+      assert.include(element.fileContent, '<<<<<<<');
+    });
+
+    test('n moves to next conflict', async () => {
+      element.fileContent = TWO_CONFLICTS;
+      await element.updateComplete;
+      keydownOn(document, 'n');
+      await element.updateComplete;
+      assert.include(
+        element.shadowRoot!.querySelector('.conflict-badge')!.textContent,
+        '2 / 2'
+      );
+    });
+  });
+
   suite('shortcut legend', () => {
     test('legend element exists in DOM', async () => {
       element.fileContent = '';
@@ -582,7 +632,7 @@ suite('gr-merge-editor tests', () => {
       await element.updateComplete;
       const legend = element.shadowRoot!.querySelector('.shortcut-legend')!;
       const text = legend.textContent!;
-      for (const key of ['Alt+C', 'Alt+I', 'Alt+B', 'Alt+N', 'Alt+P', 'Alt+U']) {
+      for (const key of ['c', 'i', 'b', 'n', 'p', 'u']) {
         assert.include(text, key, `shortcut ${key} missing from legend`);
       }
     });
