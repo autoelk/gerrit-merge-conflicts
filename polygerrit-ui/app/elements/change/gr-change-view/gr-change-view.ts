@@ -34,6 +34,7 @@ import '../gr-related-changes-list/gr-related-changes-list';
 import '../gr-reply-dialog/gr-reply-dialog';
 import '../gr-thread-list/gr-thread-list';
 import '../gr-flows/gr-flows';
+import '../gr-conflict-resolution-view/gr-conflict-resolution-view';
 import {ChangeStarToggleStarDetail} from '../../shared/gr-change-star/gr-change-star';
 import {GrEditConstants} from '../../edit/gr-edit-constants';
 import {pluralize, trimWithEllipsis} from '../../../utils/string-util';
@@ -140,6 +141,7 @@ import {
   changeViewModelToken,
   ChangeViewState,
   createChangeUrl,
+  createResolveConflictsUrl,
 } from '../../../models/views/change';
 import {rootUrl} from '../../../utils/url-util';
 import {userModelToken} from '../../../models/user/user-model';
@@ -1151,6 +1153,16 @@ export class GrChangeView extends LitElement {
   }
 
   private renderMainContent() {
+    if (this.viewState?.childView === ChangeChildView.RESOLVE_CONFLICTS) {
+      return html`
+        ${this.renderHeader()}
+        <gr-conflict-resolution-view
+          .changeNum=${this.changeNum}
+          .patchNum=${this.patchNum}
+          .repo=${this.change?.project}
+        ></gr-conflict-resolution-view>
+      `;
+    }
     return html`
       ${this.renderHeader()}
       <gr-content-with-sidebar .hideSide=${!this.showSidebarChat}>
@@ -1338,6 +1350,7 @@ export class GrChangeView extends LitElement {
   private renderCommitActions() {
     return html`
       <div class="commitActions">
+        ${this.renderResolveConflictsButton()}
         <gr-change-actions
           id="actions"
           @ai-chat=${() => this.toggleChat()}
@@ -1350,6 +1363,32 @@ export class GrChangeView extends LitElement {
       </div>
     `;
   }
+
+  private renderResolveConflictsButton() {
+    if (!this.shouldShowResolveConflictsButton()) return nothing;
+    return html`
+      <gr-button @click=${this.handleResolveConflictsTap}>
+        Resolve conflicts
+      </gr-button>
+    `;
+  }
+
+  private shouldShowResolveConflictsButton() {
+    return (
+      !!this.change?.contains_git_conflicts ||
+      !!this.revision?.commit?.resolve_conflicts_web_links?.length
+    );
+  }
+
+  private handleResolveConflictsTap = () => {
+    if (!this.change) return;
+    this.getNavigation().setUrl(
+      createResolveConflictsUrl({
+        change: this.change,
+        patchNum: this.patchNum,
+      })
+    );
+  };
 
   private renderChangeInfo() {
     const hideEditCommitMessage = this.computeHideEditCommitMessage(

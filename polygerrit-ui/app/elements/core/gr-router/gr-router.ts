@@ -214,6 +214,10 @@ const RoutePattern = {
   // Matches /c/<project>/+/<changeNum>/[<patchNum|edit>],edit
   CHANGE_EDIT: /^\/c\/(.+)\/\+\/(\d+)(\/(\d+))?,edit\/?$/,
 
+  // Matches /c/<project>/+/<changeNum>/[<patchNum|edit>]/resolve-conflicts
+  CHANGE_RESOLVE_CONFLICTS:
+    /^\/c\/(.+)\/\+\/(\d+)(\/(\d+|edit))?\/resolve-conflicts\/?$/,
+
   // Matches /c/<project>/+/<changeNum>/comment/<commentId>/
   // Navigates to the diff view
   // This route is needed to resolve to patchNum vs latestPatchNum used in the
@@ -889,6 +893,12 @@ export class GrRouter implements Finalizable, NavigationService {
       true
     );
 
+    this.mapRoute(
+      RoutePattern.CHANGE_RESOLVE_CONFLICTS,
+      'handleChangeResolveConflictsRoute',
+      ctx => this.handleChangeResolveConflictsRoute(ctx)
+    );
+
     this.mapRoute(RoutePattern.COMMENT, 'handleCommentRoute', ctx =>
       this.handleCommentRoute(ctx)
     );
@@ -1407,6 +1417,25 @@ export class GrRouter implements Finalizable, NavigationService {
     this.reporting.setChangeId(changeNum);
     this.normalizePatchRangeParams(state);
     // Note that router model view must be updated before view models.
+    this.setState(state);
+    this.changeViewModel.setState(state);
+  }
+
+  handleChangeResolveConflictsRoute(ctx: PageContext) {
+    const changeNum = Number(ctx.params[1]) as NumericChangeId;
+    const state: ChangeViewState = {
+      repo: ctx.params[0] as RepoName,
+      changeNum,
+      patchNum: convertToPatchSetNum(ctx.params[3]) as RevisionPatchSetNum,
+      view: GerritView.CHANGE,
+      childView: ChangeChildView.RESOLVE_CONFLICTS,
+    };
+    const queryMap = new URLSearchParams(ctx.querystring);
+    if (queryMap.has('forceReload')) state.forceReload = true;
+    assertIsDefined(state.repo, 'project');
+    this.reporting.setRepoName(state.repo);
+    this.reporting.setChangeId(changeNum);
+    this.normalizePatchRangeParams(state);
     this.setState(state);
     this.changeViewModel.setState(state);
   }

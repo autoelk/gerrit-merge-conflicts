@@ -7,7 +7,13 @@ import {
   RestApiService,
   SubmittabilityInfo,
 } from '../../services/gr-rest-api/gr-rest-api';
-import {FlowActionInfo, FlowInfo} from '../../api/rest-api';
+import {
+  ConflictDataInfo,
+  FlowActionInfo,
+  FlowInfo,
+  ResolveConflictsInput,
+  ResolveConflictsResponse,
+} from '../../api/rest-api';
 import {
   AccountCapabilityInfo,
   AccountDetailInfo,
@@ -45,6 +51,7 @@ import {
   MergeableInfo,
   NameToProjectInfoMap,
   NumericChangeId,
+  PatchSetNum,
   PluginInfo,
   PreferencesInfo,
   PreferencesInput,
@@ -268,6 +275,16 @@ export const grRestApiMock: RestApiService = {
   },
   getChangeRevisionActions(): Promise<ActionNameToActionInfoMap | undefined> {
     return Promise.resolve({});
+  },
+  getRevisionConflicts(): Promise<ConflictDataInfo | undefined> {
+    return Promise.resolve(undefined);
+  },
+  resolveRevisionConflicts(
+    _changeNum: NumericChangeId,
+    _patchNum: PatchSetNum,
+    _input: ResolveConflictsInput
+  ): Promise<ResolveConflictsResponse | undefined> {
+    return Promise.resolve(undefined);
   },
   getChangeSuggestedCCs(): Promise<SuggestedReviewerInfo[] | undefined> {
     return Promise.resolve([]);

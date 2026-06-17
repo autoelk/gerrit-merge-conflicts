@@ -177,6 +177,7 @@ suite('gr-router tests', () => {
       'handleChangeIdQueryRoute',
       'handleChangeNumberLegacyRoute',
       'handleChangeRoute',
+      'handleChangeResolveConflictsRoute',
       'handleCommentRoute',
       'handleCommentsRoute',
       'handleDiffRoute',
@@ -1066,6 +1067,17 @@ suite('gr-router tests', () => {
           childView: ChangeChildView.OVERVIEW,
           patchNum: 3 as RevisionPatchSetNum,
           edit: true,
+        });
+      });
+
+      test('CHANGE_RESOLVE_CONFLICTS', async () => {
+        await checkUrlToState('/c/foo/bar/+/1234/3/resolve-conflicts', {
+          ...createChangeViewState(),
+          repo: 'foo/bar' as RepoName,
+          changeNum: 1234 as NumericChangeId,
+          view: GerritView.CHANGE,
+          childView: ChangeChildView.RESOLVE_CONFLICTS,
+          patchNum: 3 as RevisionPatchSetNum,
         });
       });
     });

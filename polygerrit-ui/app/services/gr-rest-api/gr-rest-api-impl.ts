@@ -134,17 +134,20 @@ import {RetryScheduler} from '../scheduler/retry-scheduler';
 import {
   BatchLabelInput,
   BatchSubmitRequirementInput,
+  ConflictDataInfo,
   DeleteLabelInput,
   FileInfo,
   FixReplacementInfo,
   FlowActionInfo,
   FlowInfo,
   FlowInput,
+  IsFlowsEnabledInfo,
   LabelDefinitionInfo,
   LabelDefinitionInput,
+  ResolveConflictsInput,
+  ResolveConflictsResponse,
   SubmitRequirementInput,
 } from '../../api/rest-api';
-import {IsFlowsEnabledInfo} from '../../api/rest-api';
 import {
   FetchParams,
   FetchPromisesCache,
@@ -1532,6 +1535,37 @@ export class GrRestApiServiceImpl implements RestApiService, Finalizable {
       url: `${url}/actions`,
       anonymizedUrl: `${ANONYMIZED_REVISION_BASE_URL}/actions`,
     }) as Promise<ActionNameToActionInfoMap | undefined>;
+  }
+
+  async getRevisionConflicts(
+    changeNum: NumericChangeId,
+    patchNum: PatchSetNum
+  ): Promise<ConflictDataInfo | undefined> {
+    const url = await this._changeBaseURL(changeNum, patchNum);
+    return this._restApiHelper.fetchJSON({
+      url: `${url}/conflicts`,
+      anonymizedUrl: `${ANONYMIZED_REVISION_BASE_URL}/conflicts`,
+    }) as Promise<ConflictDataInfo | undefined>;
+  }
+
+  async resolveRevisionConflicts(
+    changeNum: NumericChangeId,
+    patchNum: PatchSetNum,
+    input: ResolveConflictsInput
+  ): Promise<ResolveConflictsResponse | undefined> {
+    const url = await this._changeBaseURL(changeNum, patchNum);
+    const response = await this._restApiHelper.fetch({
+      url: `${url}/conflicts:resolve`,
+      anonymizedUrl: `${ANONYMIZED_REVISION_BASE_URL}/conflicts:resolve`,
+      fetchOptions: getFetchOptions({
+        method: HttpMethod.POST,
+        body: input,
+      }),
+      reportServerError: true,
+    });
+    if (!response?.ok) return undefined;
+    return (await readJSONResponsePayload(response))
+      .parsed as unknown as ResolveConflictsResponse;
   }
 
   getChangeSuggestedReviewers(
