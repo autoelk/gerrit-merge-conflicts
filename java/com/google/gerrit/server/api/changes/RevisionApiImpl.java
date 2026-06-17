@@ -51,9 +51,11 @@ import com.google.gerrit.extensions.common.EditInfo;
 import com.google.gerrit.extensions.common.FileInfo;
 import com.google.gerrit.extensions.common.Input;
 import com.google.gerrit.extensions.common.MergeableInfo;
+import com.google.gerrit.extensions.common.PublishThreeWayMergeConflictsInput;
 import com.google.gerrit.extensions.common.RevisionInfo;
 import com.google.gerrit.extensions.common.TestSubmitRuleInfo;
 import com.google.gerrit.extensions.common.TestSubmitRuleInput;
+import com.google.gerrit.extensions.common.ThreeWayMergeConflictsInfo;
 import com.google.gerrit.extensions.restapi.BinaryResult;
 import com.google.gerrit.extensions.restapi.IdString;
 import com.google.gerrit.extensions.restapi.RestApiException;
@@ -81,6 +83,7 @@ import com.google.gerrit.server.restapi.change.GetPatch;
 import com.google.gerrit.server.restapi.change.GetRelated;
 import com.google.gerrit.server.restapi.change.GetRevision;
 import com.google.gerrit.server.restapi.change.GetRevisionActions;
+import com.google.gerrit.server.restapi.change.GetThreeWayMergeConflicts;
 import com.google.gerrit.server.restapi.change.ListPortedComments;
 import com.google.gerrit.server.restapi.change.ListPortedDrafts;
 import com.google.gerrit.server.restapi.change.ListRevisionComments;
@@ -88,6 +91,7 @@ import com.google.gerrit.server.restapi.change.ListRevisionDrafts;
 import com.google.gerrit.server.restapi.change.Mergeable;
 import com.google.gerrit.server.restapi.change.PostReview;
 import com.google.gerrit.server.restapi.change.PreviewFix;
+import com.google.gerrit.server.restapi.change.PublishThreeWayMergeConflicts;
 import com.google.gerrit.server.restapi.change.PutDescription;
 import com.google.gerrit.server.restapi.change.Rebase;
 import com.google.gerrit.server.restapi.change.Reviewed;
@@ -129,6 +133,8 @@ class RevisionApiImpl implements RevisionApi {
   private final GetPatch getPatch;
   private final PostReview review;
   private final Mergeable mergeable;
+  private final GetThreeWayMergeConflicts getThreeWayMergeConflicts;
+  private final PublishThreeWayMergeConflicts publishThreeWayMergeConflicts;
   private final FileApiImpl.Factory fileApi;
   private final ListRevisionComments listComments;
   private final ListPortedComments listPortedComments;
@@ -175,6 +181,8 @@ class RevisionApiImpl implements RevisionApi {
       GetPatch getPatch,
       PostReview review,
       Mergeable mergeable,
+      GetThreeWayMergeConflicts getThreeWayMergeConflicts,
+      PublishThreeWayMergeConflicts publishThreeWayMergeConflicts,
       FileApiImpl.Factory fileApi,
       ListRevisionComments listComments,
       ListPortedComments listPortedComments,
@@ -219,6 +227,8 @@ class RevisionApiImpl implements RevisionApi {
     this.getCommit = getCommit;
     this.getPatch = getPatch;
     this.mergeable = mergeable;
+    this.getThreeWayMergeConflicts = getThreeWayMergeConflicts;
+    this.publishThreeWayMergeConflicts = publishThreeWayMergeConflicts;
     this.fileApi = fileApi;
     this.listComments = listComments;
     this.listPortedComments = listPortedComments;
@@ -375,6 +385,25 @@ class RevisionApiImpl implements RevisionApi {
       return mergeable.apply(revision).value();
     } catch (Exception e) {
       throw asRestApiException("Cannot check mergeability", e);
+    }
+  }
+
+  @Override
+  public ThreeWayMergeConflictsInfo threeWayMergeConflicts() throws RestApiException {
+    try {
+      return getThreeWayMergeConflicts.apply(revision).value();
+    } catch (Exception e) {
+      throw asRestApiException("Cannot retrieve three-way merge conflicts", e);
+    }
+  }
+
+  @Override
+  public ChangeInfo publishThreeWayMergeConflicts(PublishThreeWayMergeConflictsInput in)
+      throws RestApiException {
+    try {
+      return publishThreeWayMergeConflicts.apply(revision, in).value();
+    } catch (Exception e) {
+      throw asRestApiException("Cannot publish three-way merge conflicts", e);
     }
   }
 
